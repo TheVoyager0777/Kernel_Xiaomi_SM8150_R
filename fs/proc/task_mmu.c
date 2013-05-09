@@ -15,10 +15,11 @@
 #include <linux/sched/mm.h>
 #include <linux/swapops.h>
 #include <linux/mmu_notifier.h>
-#include <linux/mm_inline.h>
 #include <linux/page_idle.h>
 #include <linux/shmem_fs.h>
 #include <linux/uaccess.h>
+#include <linux/pkeys.h>
+#include <linux/mm_inline.h>
 #include <linux/ctype.h>
 
 #include <asm/elf.h>
@@ -2002,6 +2003,7 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	unsigned long end = 0;
 	struct reclaim_param rp;
 	int ret;
+	struct mm_walk reclaim_walk = {};
 
 	memset(buffer, 0, sizeof(buffer));
 	if (count > sizeof(buffer) - 1)
