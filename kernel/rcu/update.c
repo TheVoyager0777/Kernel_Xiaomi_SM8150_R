@@ -722,7 +722,7 @@ static int __noreturn rcu_tasks_kthread(void *arg)
 	int fract;
 
 	/* Run on housekeeping CPUs by default.  Sysadm can move if desired. */
-	housekeeping_affine(current);
+	housekeeping_affine(current, HK_FLAG_RCU);
 
 	/*
 	 * Each pass through the following loop makes one check for
