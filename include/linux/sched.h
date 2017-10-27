@@ -234,8 +234,6 @@ enum migrate_types {
 	RQ_TO_GROUP,
 };
 
-extern cpumask_var_t			cpu_isolated_map;
-
 #ifdef CONFIG_HOTPLUG_CPU
 extern int sched_isolate_count(const cpumask_t *mask, bool include_offline);
 extern int sched_isolate_cpu(int cpu);
