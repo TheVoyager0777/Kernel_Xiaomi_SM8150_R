@@ -24,10 +24,17 @@ Start=$(date +"%s")
 
 make -j$(nproc --all) \
 	O=out_raphael \
-	CC="${ccache_} ${CLANG_PATH}/bin/clang" \
-	CLANG_TRIPLE=/bin/aarch64-linux-gnu- \
+	CC="${ccache_} clang" \
+	AS=llvm-as \
+	LD=ld.lld \
+	AR=llvm-ar \
+	NM=llvm-nm \
+	STRIP=llvm-strip \
+	OBJCOPY=llvm-objcopy \
+	OBJDUMP=llvm-objdump \
+	CLANG_TRIPLE=aarch64-linux-gnu- \
 	CROSS_COMPILE=/bin/aarch64-linux-gnu- \
-	CROSS_COMPILE_ARM32=/bin/arm-linux-gnueabi- || > build.log
+	CROSS_COMPILE_ARM32=/bin/arm-linux-gnueabi-
 
 exit_code=$?
 End=$(date +"%s")
