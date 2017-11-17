@@ -110,7 +110,7 @@ static void __init free_hash(void)
 	}
 }
 
-static long __init do_utime(char *filename, time_t mtime)
+static long __init do_utime(char *filename, time64_t mtime)
 {
 	struct timespec64 t[2];
 
@@ -126,10 +126,10 @@ static __initdata LIST_HEAD(dir_list);
 struct dir_entry {
 	struct list_head list;
 	char *name;
-	time_t mtime;
+	time64_t mtime;
 };
 
-static void __init dir_add(const char *name, time_t mtime)
+static void __init dir_add(const char *name, time64_t mtime)
 {
 	struct dir_entry *de = kmalloc(sizeof(struct dir_entry), GFP_KERNEL);
 	if (!de)
@@ -151,7 +151,7 @@ static void __init dir_utime(void)
 	}
 }
 
-static __initdata time_t mtime;
+static __initdata time64_t mtime;
 
 /* cpio header parsing */
 
@@ -178,7 +178,7 @@ static void __init parse_header(char *s)
 	uid = parsed[2];
 	gid = parsed[3];
 	nlink = parsed[4];
-	mtime = parsed[5];
+	mtime = parsed[5]; /* breaks in y2106 */
 	body_len = parsed[6];
 	major = parsed[7];
 	minor = parsed[8];
