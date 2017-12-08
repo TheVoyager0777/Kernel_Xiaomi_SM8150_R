@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0
-#include "sched.h"
-
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/kallsyms.h>
@@ -8,6 +6,8 @@
 #include <linux/security.h>
 #include <linux/export.h>
 #include <linux/nospec.h>
+
+#include "sched.h"
 
 unsigned int __read_mostly sysctl_sched_autogroup_enabled = 1;
 static struct autogroup autogroup_default;
