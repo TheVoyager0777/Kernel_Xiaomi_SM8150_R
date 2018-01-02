@@ -29,9 +29,6 @@ static inline int housekeeping_any_cpu(enum hk_flags flags)
 	return smp_processor_id();
 }
 
-static inline void housekeeping_init(void) { }
-#endif /* CONFIG_NO_HZ_FULL */
-
 static inline const struct cpumask *housekeeping_cpumask(enum hk_flags flags)
 {
 	return cpu_possible_mask;
