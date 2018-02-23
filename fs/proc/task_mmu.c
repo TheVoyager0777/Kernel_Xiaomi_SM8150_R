@@ -1866,7 +1866,7 @@ int reclaim_address_space(struct address_space *mapping,
 	return ret;
 }
 
-static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
+int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 				unsigned long end, struct mm_walk *walk)
 {
 	struct reclaim_param *rp = walk->private;
@@ -1891,6 +1891,12 @@ cont:
 
 		page = vm_normal_page(vma, addr, ptent);
 		if (!page)
+			continue;
+
+		if (!PageLRU(page))
+			continue;
+
+		if (page_mapcount(page) != 1)
 			continue;
 
 		if (isolate_lru_page(compound_head(page)))
@@ -1927,7 +1933,7 @@ cont:
 		goto cont;
 
 	cond_resched();
-	return 0;
+	return (rp->nr_to_reclaim == 0) ? -EPIPE : 0;
 }
 
 enum reclaim_type {
@@ -2071,6 +2077,7 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 			ret = walk_page_range(mm, max(vma->vm_start, start),
 					min(vma->vm_end, end),
 					&reclaim_walk_ops, &rp);
+
 			if (ret)
 				break;
 			vma = vma->vm_next;
@@ -2089,6 +2096,7 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 			rp.vma = vma;
 			ret = walk_page_range(mm, vma->vm_start, vma->vm_end,
 				&reclaim_walk_ops, &rp);
+
 			if (ret)
 				break;
 		}
