@@ -143,6 +143,10 @@ static inline void tlb_remove_check_page_size_change(struct mmu_gather *tlb,
 {
 }
 
+static inline void tlb_change_page_size(struct mmu_gather *tlb, unsigned int page_size)
+{
+}
+
 #define pte_free_tlb(tlb, ptep, addr)	pte_free((tlb)->mm, ptep)
 #define pmd_free_tlb(tlb, pmdp, addr)	pmd_free((tlb)->mm, pmdp)
 #define pud_free_tlb(tlb, pudp, addr)	pud_free((tlb)->mm, pudp)
