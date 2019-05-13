@@ -1,5 +1,4 @@
 /* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -4696,7 +4695,6 @@ static int fg_psy_set_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-/*
 		if (chip->cl->active) {
 			pr_warn("Capacity learning active!\n");
 			return 0;
@@ -4705,7 +4703,6 @@ static int fg_psy_set_property(struct power_supply *psy,
 			pr_err("charge_full is out of bounds\n");
 			return -EINVAL;
 		}
-*/
 		mutex_lock(&chip->cl->lock);
 		rc = fg_gen4_store_learned_capacity(chip, pval->intval);
 		if (!rc)

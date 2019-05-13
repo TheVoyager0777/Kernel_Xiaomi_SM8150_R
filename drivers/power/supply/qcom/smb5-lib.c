@@ -1,5 +1,4 @@
 /* Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2793,24 +2792,6 @@ bool smblib_support_liquid_feature(struct smb_charger *chg)
 	return chg->support_liquid;
 }
 
-int smblib_get_prop_battery_charging_enabled(struct smb_charger *chg,
-					     union power_supply_propval *val)
-{
-	int rc;
-	u8 reg;
-
-	rc = smblib_read(chg, CHARGING_ENABLE_CMD_REG, &reg);
-	if (rc < 0) {
-		smblib_err(chg,
-			"Couldn't read battery CHARGING_ENABLE_CMD rc=%d\n", rc);
-		return rc;
-	}
-
-	reg = reg & CHARGING_ENABLE_CMD_BIT;
-	val->intval = (reg == CHARGING_ENABLE_CMD_BIT);
-	return 0;
-}
-
 /***********************
  * BATTERY PSY SETTERS *
  ***********************/
@@ -3297,33 +3278,6 @@ int smblib_set_prop_rechg_soc_thresh(struct smb_charger *chg,
 	chg->auto_recharge_soc = val->intval;
 
 	return rc;
-}
-
-int smblib_set_prop_battery_charging_enabled(struct smb_charger *chg,
-					     const union power_supply_propval *val)
-{
-	int rc;
-
-	smblib_dbg(chg, PR_MISC, "%s intval= %x\n", __func__, val->intval);
-
-	if (val->intval == 1) {
-		rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG,
-			CHARGING_ENABLE_CMD_BIT, CHARGING_ENABLE_CMD_BIT);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't enable charging rc=%d\n", rc);
-			return rc;
-		}
-	} else if (val->intval == 0) {
-		rc = smblib_masked_write(chg, CHARGING_ENABLE_CMD_REG,
-			CHARGING_ENABLE_CMD_BIT, 0);
-		if (rc < 0) {
-			smblib_err(chg, "Couldn't disable charging rc=%d\n", rc);
-			return rc;
-		}
-	} else
-		smblib_err(chg, "Couldn't disable charging rc=%d\n", rc);
-
-	return 0;
 }
 
 int smblib_run_aicl(struct smb_charger *chg, int type)
@@ -4517,12 +4471,11 @@ int smblib_get_prop_usb_voltage_now(struct smb_charger *chg,
 
 restore_adc_config:
 	 /* Restore ADC channel config */
-	if (chg->wa_flags & USBIN_ADC_WA) {
+	if (chg->wa_flags & USBIN_ADC_WA)
 		rc = smblib_write(chg, BATIF_ADC_CHANNEL_EN_REG, reg);
 		if (rc < 0)
 			smblib_err(chg, "Couldn't write ADC config rc=%d\n",
 						rc);
-	}
 
 unlock:
 	mutex_unlock(&chg->adc_lock);
@@ -7832,15 +7785,6 @@ irqreturn_t typec_attach_detach_irq_handler(int irq, void *data)
 	} else {
 		switch (chg->sink_src_mode) {
 		case SRC_MODE:
-			/* rerun APSD */
-			rc = smblib_masked_write(chg, CMD_APSD_REG, APSD_RERUN_BIT,
-				APSD_RERUN_BIT);
-			if(rc < 0){
-				smblib_err(chg, "Rerun APSD failed rc=%d\n",
-					rc);
-			}
-			rc = smblib_read(chg, APSD_RESULT_STATUS_REG, &stat);
-			smblib_err(chg, "read APSD_RESULT_STATUS stat=0x%x\n", stat);
 			typec_sink_removal(chg);
 			break;
 		case SINK_MODE:

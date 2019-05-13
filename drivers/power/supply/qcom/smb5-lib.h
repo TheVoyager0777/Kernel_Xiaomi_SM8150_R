@@ -1,5 +1,4 @@
 /* Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -120,21 +119,11 @@ enum print_reason {
 #define MAIN_CHG_VOTER			"MAIN_CHG_VOTER"
 #define HVDCP3_START_ICL_VOTER	"HVDCP3_START_ICL_VOTER"
 #define MAIN_CHG_SUSPEND_VOTER			"MAIN_CHG_SUSPEND_VOTER"
-/* use for QC3P5 */
-#define QC3P5_VOTER			"QC3P5_VOTER"
-#define FCC_MAX_QC3P5_VOTER		"FCC_MAX_QC3P5_VOTER"
-/* use for Ln8000 */
-#define BATT_LN8000_VOTER		"BATT_LN8000_VOTER"
-#define BATT_BQ2597X_VOTER		"BATT_BQ2597X_VOTER"
 
 #define WLS_FCC_VOTER			"WLS_FCC_VOTER"
 
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
-
-#define MAX_QC3P5_PLUSE_COUNT_ALLOWED		230
-#define QC3P5_DP_RAPIDLY_TUNE_ALLOWED		120
-#define QC3P5_DP_RAPIDLY_TUNE_PULSE		10
 
 /* defined for distinguish qc class_a and class_b */
 #define VOL_THR_FOR_QC_CLASS_AB		12300000
@@ -145,7 +134,7 @@ enum print_reason {
 #define MAX_PULSE			38
 #define MAX_PLUSE_COUNT_ALLOWED		30
 #define HIGH_NUM_PULSE_THR		12
-#if defined(CONFIG_QPNP_SMB5_NABU)
+#if defined(CONFIG_QPNP_SMB5_VAYU)
 #define PD_UNVERIFED_CURRENT           4800000
 #else
 #define PD_UNVERIFED_CURRENT		3000000
@@ -205,11 +194,7 @@ enum print_reason {
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
 #define CDP_CURRENT_UA			1500000
-#ifdef CONFIG_QPNP_SMB5_NABU
-#define DCP_CURRENT_UA			2000000
-#else
-#define DCP_CURRENT_UA                  1600000
-#endif
+#define DCP_CURRENT_UA			1600000
 #define HVDCP_CURRENT_UA		2800000
 #define HVDCP_CLASS_B_CURRENT_UA		3100000
 #define HVDCP_START_CURRENT_UA_FOR_BQ	500000
@@ -221,7 +206,6 @@ enum print_reason {
 #define DCIN_ICL_STEP_UA		100000
 #define SLOWLY_CHARGING_CURRENT		1000000
 #define ADC_CHG_TERM_MASK		32767
-#define HVDCP3P5_40W_CURRENT_UA		4500000
 /*DCIN ICL*/
 #define PSNS_CURRENT_SAMPLE_RATE 1053
 #define PSNS_CURRENT_SAMPLE_RESIS 392
@@ -263,7 +247,7 @@ enum print_reason {
 /* used for bq charge pump solution */
 #define MAIN_CHARGER_ICL	2000000
 #define QC3_CHARGER_ICL		500000
-#define QC3P5_CHARGER_ICL	2000000
+#define QC3P5_CHARGER_ICL	200000
 
 #define MAIN_CHARGER_STOP_ICL	50000
 #define ESR_WORK_TIME_2S	2000
@@ -637,7 +621,7 @@ struct smb_charger {
 	struct power_supply		*ln_psy;
 	struct power_supply		*halo_psy;
 	struct power_supply		*cp_chip_psy;
-#if (defined CONFIG_BATT_VERIFY_BY_DS28E16 || defined CONFIG_BATT_VERIFY_BY_DS28E16_NABU)
+#ifdef CONFIG_BATT_VERIFY_BY_DS28E16
 	struct power_supply		*batt_verify_psy;
 #endif
 	enum power_supply_type		real_charger_type;
@@ -718,7 +702,6 @@ struct smb_charger {
 	struct delayed_work	six_pin_batt_step_chg_work;
 	struct delayed_work	reduce_fcc_work;
 	struct delayed_work	thermal_setting_work;
-	struct delayed_work	check_vbat_work;
 	struct alarm		lpd_recheck_timer;
 	struct alarm		moisture_protection_alarm;
 	struct alarm		chg_termination_alarm;
@@ -862,13 +845,10 @@ struct smb_charger {
 	bool			apsd_ext_timeout;
 	bool			qc3p5_detected;
 	int			vbus_disable;
-	bool			en_bq_flag;
 	int64_t			rpp;
 	int64_t			cep;
 	int64_t			tx_bt_mac;
-	int64_t			pen_bt_mac;
 	int			reverse_chg_state;
-	int			reverse_gpio_state;
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -928,7 +908,6 @@ struct smb_charger {
 	bool			cc_un_compliant_detected;
 	bool			snk_debug_acc_detected;
 	bool			support_wireless;
-	bool			wireless_bq;
 	bool			support_conn_therm;
 	bool			ext_fg;
 	int			conn_detect_count;
@@ -1225,8 +1204,6 @@ int smblib_get_prop_liquid_status(struct smb_charger *chg,
 					union power_supply_propval *val);
 int smblib_set_prop_tx_mac(struct smb_charger *chg,
 				const union power_supply_propval *val);
-void smblib_set_prop_pen_mac(struct smb_charger *chg,
-				const union power_supply_propval *val);
 int smblib_set_prop_rx_cr(struct smb_charger *chg,
 				const union power_supply_propval *val);
 int smblib_set_prop_rx_cep(struct smb_charger *chg,
@@ -1245,7 +1222,7 @@ void smblib_apsd_enable(struct smb_charger *chg, bool enable);
 int smblib_force_vbus_voltage(struct smb_charger *chg, u8 val);
 int smblib_get_irq_status(struct smb_charger *chg,
 		union power_supply_propval *val);
-#ifdef CONFIG_QPNP_SMB5_NABU
+#ifdef CONFIG_QPNP_SMB5_VAYU
 int smb5_config_iterm(struct smb_charger *chg, int hi_thresh, int low_thresh);
 #endif
 int smblib_get_prop_battery_charging_enabled(struct smb_charger *chg,
@@ -1264,10 +1241,4 @@ struct usbpd *smb_get_usbpd(void);
 
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
-int smblib_get_prop_wireless_fw_version(struct smb_charger *chg,
-					union power_supply_propval *val);
-int smblib_set_prop_battery_charging_enabled(struct smb_charger *chg,
-					     const union power_supply_propval *val);
-int smblib_get_prop_battery_charging_enabled(struct smb_charger *chg,
-					     union power_supply_propval *val);
 #endif /* __SMB5_CHARGER_H */
