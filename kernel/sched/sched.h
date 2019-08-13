@@ -2884,3 +2884,13 @@ void __weak migt_monitot_init(struct task_struct *tsk)
 }
 #endif
 
+#ifdef CONFIG_SMP
+static inline void sched_irq_work_queue(struct irq_work *work)
+{
+	if (likely(cpu_online(raw_smp_processor_id())))
+		irq_work_queue(work);
+	else
+		irq_work_queue_on(work, cpumask_any(cpu_online_mask));
+}
+#endif
+
