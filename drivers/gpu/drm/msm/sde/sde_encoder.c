@@ -4793,6 +4793,7 @@ static int _sde_encoder_reset_ctl_hw(struct drm_encoder *drm_enc)
 
 void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error)
 {
+	static bool first_run = true;
 	struct sde_encoder_virt *sde_enc;
 	struct sde_encoder_phys *phys;
 	struct dsi_bridge *bridge = NULL;
@@ -4847,17 +4848,23 @@ void sde_encoder_kickoff(struct drm_encoder *drm_enc, bool is_error)
 				nsecs_to_jiffies(ktime_to_ns(wakeup_time)));
 	}
 
-	if (dsi_display && dsi_display->panel
-		&& dsi_display->panel->host_config.phy_type == DSI_PHY_TYPE_CPHY
-		&& adj_mode.dsi_mode_flags & DSI_MODE_FLAG_VRR) {
-		dsi_panel_match_fps_pen_setting(dsi_display->panel, &adj_mode);
-		mutex_unlock(&dsi_display->panel->panel_lock);
-	}
+	/*
+	 * Trigger a panel reset if this is the first kickoff and the refresh
+	 * rate is not 60 Hz
+	 */
+	if (cmpxchg(&first_run, true, false) &&
+	    sde_enc->crtc->mode.vrefresh != 60) {
+		struct sde_connector *conn = container_of(phys->connector, struct sde_connector, base);
+		struct drm_event event = {
+			.type = DRM_EVENT_PANEL_DEAD,
+			.length = sizeof(bool)
+		};
 
-	if (drm_enc->bridge && drm_enc->bridge->is_dsi_drm_bridge) {
-		struct dsi_bridge *c_bridge = container_of((drm_enc->bridge), struct dsi_bridge, base);
-		if (c_bridge && c_bridge->display && c_bridge->display->panel)
-			c_bridge->display->panel->kickoff_count++;
+		conn->panel_dead = true;
+		event.type = DRM_EVENT_PANEL_DEAD;
+		event.length = sizeof(bool);
+		msm_mode_object_event_notify(&conn->base.base,
+			conn->base.dev, &event, (u8 *) &conn->panel_dead);
 	}
 
 	SDE_ATRACE_END("encoder_kickoff");
