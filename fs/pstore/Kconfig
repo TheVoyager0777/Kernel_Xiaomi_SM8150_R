@@ -95,3 +95,4 @@ config PSTORE_LAST_KMSG
         help
           When the option is enabled, pstore will export a proc filesystem
           interface /proc/last_kmsg.
+

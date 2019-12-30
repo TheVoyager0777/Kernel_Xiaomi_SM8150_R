@@ -421,6 +421,12 @@ int pstore_mkfile(struct dentry *root, struct pstore_record *record)
 	spin_lock_irqsave(&allpstore_lock, flags);
 	list_add(&private->list, &allpstore);
 	spin_unlock_irqrestore(&allpstore_lock, flags);
+#ifdef CONFIG_PSTORE_LAST_KMSG
+	if (record->type == PSTORE_TYPE_CONSOLE) {
+		console_buffer = record->buf;
+		console_bufsize = size;
+	}
+#endif
 
 #ifdef CONFIG_PSTORE_LAST_KMSG
 	if (record->type == PSTORE_TYPE_CONSOLE) {
@@ -514,6 +520,10 @@ static struct file_system_type pstore_fs_type = {
 static int __init init_pstore_fs(void)
 {
 	int err;
+#ifdef CONFIG_PSTORE_LAST_KMSG
+	struct proc_dir_entry *last_kmsg_entry = NULL;
+#endif
+
 #ifdef CONFIG_PSTORE_LAST_KMSG
 	struct proc_dir_entry *last_kmsg_entry = NULL;
 #endif
