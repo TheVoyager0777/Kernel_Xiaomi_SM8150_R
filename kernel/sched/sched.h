@@ -348,14 +348,15 @@ struct cfs_bandwidth {
 	u64			burst;
 	u64			buffer;
 	u64			max_overrun;
+	u64			previous_runtime;
 
 	short idle, period_active;
 	struct hrtimer period_timer, slack_timer;
 	struct list_head throttled_cfs_rq;
 
 	/* statistics */
-	int nr_periods, nr_throttled;
-	u64 throttled_time;
+	int nr_periods, nr_throttled, nr_burst;
+	u64 throttled_time, burst_time;
 
 	bool distribute_running;
 #endif
