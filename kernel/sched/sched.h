@@ -346,6 +346,8 @@ struct cfs_bandwidth {
 	u64 quota, runtime;
 	s64 hierarchical_quota;
 	u64			burst;
+	u64			init_buffer;
+	u64			current_buffer;
 	u64			buffer;
 	u64			max_overrun;
 	u64			previous_runtime;
