@@ -2875,6 +2875,7 @@ void __init setup_nr_node_ids(void);
 static inline void setup_nr_node_ids(void) {}
 #endif
 
+extern unsigned long reclaim_global(unsigned long nr_to_reclaim);
 extern int want_old_faultaround_pte;
 
 #ifdef CONFIG_PROCESS_RECLAIM
