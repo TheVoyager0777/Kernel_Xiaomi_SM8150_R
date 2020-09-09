@@ -141,6 +141,7 @@ struct dsi_backlight_config {
 	bool dcs_type_ss_eb;
 	bool xiaomi_f4_36_flag;
 	bool xiaomi_f4_41_flag;
+	bool bl_remap_flag;
 
 	int en_gpio;
 	bool bl_remap_flag;
