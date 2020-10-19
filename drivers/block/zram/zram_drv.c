@@ -1319,7 +1319,7 @@ out:
 static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 				struct bio *bio, bool partial_io)
 {
-	struct zcomp_strm *zstrm;
+        struct zcomp_strm *zstrm;
 	struct zram_entry *entry;
 	unsigned int size;
 	void *src, *dst;
