@@ -526,6 +526,14 @@ next_subflow:
 			rem4.port = rem->port;
 			rem4.rem4_id = rem->rem4_id;
 
+/* 2016-07-19 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [START] */
+            /* do not need to join with clat ipv4 address (192.0.0.x) */
+            if ((mptcp_local->locaddr4[i].addr.s_addr & htonl(0xffffff00)) == htonl(0xc0000000)) {
+                mptcp_debug("%s: skip clat join\n", __func__);
+                goto next_subflow;
+            }
+/* 2016-07-19 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [END] */
+
 			/* If a route is not yet available then retry once */
 			if (mptcp_init4_subsockets(meta_sk, &mptcp_local->locaddr4[i],
 						   &rem4) == -ENETUNREACH)
@@ -1063,7 +1071,11 @@ static void add_pm_event(struct net *net, const struct mptcp_addr_event *event)
 	/* Create work-queue */
 	if (!delayed_work_pending(&fm_ns->address_worker))
 		queue_delayed_work(mptcp_wq, &fm_ns->address_worker,
-				   msecs_to_jiffies(500));
+		/* 2015-08-06 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [START] */
+		//				   msecs_to_jiffies(500));
+							msecs_to_jiffies(3000));
+		/* 2015-08-06 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [END] */
+
 }
 
 static void addr4_event_handler(const struct in_ifaddr *ifa, unsigned long event,
@@ -1076,6 +1088,30 @@ static void addr4_event_handler(const struct in_ifaddr *ifa, unsigned long event
 	if (ifa->ifa_scope > RT_SCOPE_LINK ||
 	    ipv4_is_loopback(ifa->ifa_local))
 		return;
+
+/* 2015-07-01 hyoseab.song@lge.com, LGP_DATA_TCPIP_MPTCP [START] */
+    if (netdev != NULL) {
+        if ((strstr(netdev->name, "wlan0") == NULL) &&
+            (strstr(netdev->name, "rmnet_data") == NULL)) {
+            mptcp_debug("%s do not allow device : %s\n", __func__,netdev->name);
+            return;
+        } else {
+            mptcp_debug("%s allow device : %s\n", __func__,netdev->name);
+        }
+
+        if (strstr(netdev->name, "rmnet_data") != NULL) {
+            if(netdev->ifalias) {
+                mptcp_debug("%s event for %s alias %s\n", __func__,netdev->name,netdev->ifalias);
+                if(strstr(netdev->ifalias, "MOBILE_INTERNET") == NULL) {
+                    mptcp_debug("%s return event for %s is not internet PDN\n", __func__,netdev->name);
+                    return;
+                }
+            } else {
+                mptcp_debug("%s event for %s has no alias\n", __func__,netdev->name);
+            }
+        }
+    }
+/* 2015-07-01 hyoseab.song@lge.com, LGP_DATA_TCPIP_MPTCP [END] */
 
 	spin_lock_bh(&fm_ns->local_lock);
 
@@ -1200,6 +1236,30 @@ static void addr6_event_handler(const struct inet6_ifaddr *ifa, unsigned long ev
 	    (addr_type & IPV6_ADDR_LOOPBACK) ||
 	    (addr_type & IPV6_ADDR_LINKLOCAL))
 		return;
+
+/* 2015-07-01 hyoseab.song@lge.com, LGP_DATA_TCPIP_MPTCP [START] */
+    if (netdev != NULL) {
+        if ((strstr(netdev->name, "wlan0") == NULL) &&
+            (strstr(netdev->name, "rmnet_data") == NULL)) {
+            mptcp_debug("%s do not allow device : %s\n", __func__,netdev->name);
+            return;
+        } else {
+            mptcp_debug("%s allow device : %s\n", __func__,netdev->name);
+        }
+
+        if (strstr(netdev->name, "rmnet_data") != NULL) {
+            if(netdev->ifalias) {
+                mptcp_debug("%s event for %s alias %s\n", __func__,netdev->name,netdev->ifalias);
+                if(strstr(netdev->ifalias, "MOBILE_INTERNET") == NULL) {
+                    mptcp_debug("%s return event for %s is not internet PDN\n", __func__,netdev->name);
+                    return;
+                }
+            } else {
+                mptcp_debug("%s event for %s has no alias\n", __func__,netdev->name);
+            }
+        }
+    }
+/* 2015-07-01 hyoseab.song@lge.com, LGP_DATA_TCPIP_MPTCP [END] */
 
 	spin_lock_bh(&fm_ns->local_lock);
 
@@ -1366,6 +1426,14 @@ static void full_mesh_new_session(const struct sock *meta_sk)
 		    (!if_idx || mptcp_local->locaddr4[i].if_idx == if_idx) &&
 		    saddr.ip == ifa_address)
 			continue;
+
+        /* 2016-07-19 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [START] */
+        /* do not need to announce clat ipv4 address (192.0.0.x) */
+        if ((ifa_address & htonl(0xffffff00)) == htonl(0xc0000000)) {
+            mptcp_debug("%s: skip clat add address\n", __func__);
+            continue;
+        }
+        /* 2016-07-19 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [END] */
 
 		fmp->add_addr++;
 		mpcb->addr_signal = 1;
@@ -1645,6 +1713,9 @@ static void full_mesh_addr_signal(struct sock *sk, unsigned *size,
 		goto skip_ipv4;
 
 	/* IPv4 */
+/* 2016-07-19 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [START] */
+skip_clat_ipv4:
+/* 2016-07-19 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [END] */
 	unannouncedv4 = (~fmp->announced_addrs_v4) & mptcp_local->loc4_bits;
 	if (unannouncedv4 &&
 	    ((mpcb->mptcp_ver == MPTCP_VERSION_0 &&
@@ -1653,6 +1724,16 @@ static void full_mesh_addr_signal(struct sock *sk, unsigned *size,
 	    MAX_TCP_OPTION_SPACE - *size >= MPTCP_SUB_LEN_ADD_ADDR4_ALIGN_VER1))) {
 		int ind = mptcp_find_free_index(~unannouncedv4);
 
+/* 2016-07-19 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [START] */
+        __be32 ifa_address = mptcp_local->locaddr4[ind].addr.s_addr;
+
+        /* do not need to announce clat ipv4 address (192.0.0.x) */
+        if ((ifa_address & htonl(0xffffff00)) == htonl(0xc0000000)) {
+            mptcp_debug("%s: skip_clat_ipv4\n", __func__);
+            fmp->announced_addrs_v4 |= (1 << ind);
+            goto skip_clat_ipv4;
+        }
+/* 2016-07-19 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [END] */
 		opts->options |= OPTION_MPTCP;
 		opts->mptcp_options |= OPTION_ADD_ADDR;
 		opts->add_addr4.addr_id = mptcp_local->locaddr4[ind].loc4_id;

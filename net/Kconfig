@@ -91,6 +91,10 @@ source "net/netlabel/Kconfig"
 source "net/wireguard/src/Kconfig"
 source "net/mptcp/Kconfig"
 
+config LGP_DATA_TCPIP_MPTCP
+    bool "LG MPTCP feature"
+    default y
+
 endif # if INET
 
 config NETWORK_SECMARK
