@@ -36,6 +36,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <linux/miscdevice.h>
+#include "media/lirc_dev.h"
 #include <uapi/linux/lirc.h>
 #include <linux/uaccess.h>
 
