@@ -17,6 +17,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
 #include <media/rc-core.h>
+#include "media/lirc_dev.h"
+#include <linux/miscdevice.h>
 
 #define IR_SPI_DRIVER_NAME		"ir-spi"
 
