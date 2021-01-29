@@ -4,7 +4,7 @@
  * Copyright (C) Linaro 2012
  * Author: <benjamin.gaignard@linaro.org> for ST-Ericsson.
  *
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -33,6 +33,7 @@
 struct ion_cma_heap {
 	struct ion_heap heap;
 	struct cma *cma;
+	bool has_kernel_map;
 };
 
 struct ion_cma_buffer_info {
@@ -42,9 +43,8 @@ struct ion_cma_buffer_info {
 };
 #define to_cma_heap(x) container_of(x, struct ion_cma_heap, heap)
 
-static bool ion_cma_has_kernel_mapping(struct ion_heap *heap)
+static bool ion_cma_has_kernel_mapping(struct device *dev)
 {
-	struct device *dev = heap->priv;
 	struct device_node *mem_region;
 
 	mem_region = of_parse_phandle(dev->of_node, "memory-region", 0);
@@ -55,11 +55,6 @@ static bool ion_cma_has_kernel_mapping(struct ion_heap *heap)
 }
 
 /* ION CMA heap operations functions */
-static bool ion_heap_is_cma_heap_type(enum ion_heap_type type)
-{
-	return type == ION_HEAP_TYPE_DMA;
-}
-
 static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 			    unsigned long len,
 			    unsigned long flags)
@@ -78,17 +73,10 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 	if (!info)
 		return -ENOMEM;
 
-	if (ion_heap_is_cma_heap_type(buffer->heap->type) &&
-	    is_secure_allocation(buffer->flags)) {
-		pr_err("%s: CMA heap doesn't support secure allocations\n",
-		       __func__);
-		return -EINVAL;
-	}
-
 	if (align > CONFIG_CMA_ALIGNMENT)
 		align = CONFIG_CMA_ALIGNMENT;
 
-	if (!ion_cma_has_kernel_mapping(heap)) {
+	if (!cma_heap->has_kernel_map) {
 		flags &= ~((unsigned long)ION_FLAG_CACHED);
 		buffer->flags = flags;
 
@@ -106,7 +94,7 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 		if (!pages)
 			goto free_info;
 
-		if (hlos_accessible_buffer(buffer)) {
+		if (!(flags & ION_FLAG_SECURE)) {
 			if (PageHighMem(pages)) {
 				unsigned long nr_clear_pages = nr_pages;
 				struct page *page = pages;
@@ -125,7 +113,7 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 		}
 
 		if (MAKE_ION_ALLOC_DMA_READY ||
-		    (!hlos_accessible_buffer(buffer)) ||
+		    (flags & ION_FLAG_SECURE) ||
 		    !ion_buffer_cached(buffer))
 			ion_pages_sync_for_device(dev, pages, size,
 						  DMA_BIDIRECTIONAL);
@@ -150,7 +138,7 @@ free_table:
 	kfree(table);
 err_alloc:
 	if (info->cpu_addr)
-		dma_free_attrs(dev, size, info->cpu_addr, info->handle, 0);
+		dma_free_writecombine(dev, size, info->cpu_addr, info->handle);
 	else
 		cma_release(cma_heap->cma, pages, nr_pages);
 
@@ -200,6 +188,7 @@ struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *data)
 	if (!cma_heap)
 		return ERR_PTR(-ENOMEM);
 
+	cma_heap->has_kernel_map = ion_cma_has_kernel_mapping(dev);
 	cma_heap->heap.ops = &ion_cma_ops;
 	/*
 	 * get device from private heaps data, later it will be
@@ -278,15 +267,6 @@ static int ion_secure_cma_map_user(struct ion_heap *mapper,
 
 static int ion_secure_cma_pm_freeze(struct ion_heap *heap)
 {
-	long sz;
-
-	sz = atomic_long_read(&heap->total_allocated);
-	if (sz) {
-		pr_err("%s: %lx bytes won't be saved across hibernation. Aborting.",
-		       __func__, sz);
-		return -EINVAL;
-	}
-
 	return 0;
 }
 
