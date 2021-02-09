@@ -314,6 +314,10 @@ static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu)
 	 * ready for such an interface. So, we only do the latter for now.
 	 */
 	*util = min(util_cfs + util_dl, *max);
+
+#ifdef CONFIG_UCLAMP_TASK
+   	*util = uclamp_util_with(rq, *util, NULL);
+#endif	
 }
 
 static void sugov_set_iowait_boost(struct sugov_cpu *sg_cpu, u64 time,
