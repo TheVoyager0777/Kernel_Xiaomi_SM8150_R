@@ -2293,7 +2293,6 @@ static struct ufs_hba_variant_ops ufs_hba_qcom_vops = {
 static struct ufs_hba_variant ufs_hba_qcom_variant = {
 	.name		= "qcom",
 	.vops		= &ufs_hba_qcom_vops,
-};
 
 /**
  * ufs_qcom_probe - probe routine of the driver
