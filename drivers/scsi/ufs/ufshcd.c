@@ -6479,6 +6479,9 @@ static void __ufshcd_transfer_req_compl(struct ufs_hba *hba,
 			scsi_dma_unmap(cmd);
 			cmd->result = result;
 			clear_bit_unlock(index, &hba->lrb_in_use);
+			hba->ufs_stats.clk_rel.ctx = XFR_REQ_COMPL;
+			if (cmd->request)
+				ufshcd_pm_qos_put(hba);
 			lrbp->complete_time_stamp = ktime_get();
 			update_req_stats(hba, lrbp);
 			ufshcd_complete_lrbp_crypto(hba, cmd, lrbp);
@@ -6561,6 +6564,14 @@ void ufshcd_abort_outstanding_transfer_requests(struct ufs_hba *hba, int result)
 			/* Mark completed command as NULL in LRB */
 			lrbp->cmd = NULL;
 			ufshcd_release_all(hba);
+			if (cmd->request) {
+				/*
+				 * As we are accessing the "request" structure,
+				 * this must be called before calling
+				 * ->scsi_done() callback.
+				 */
+				ufshcd_pm_qos_put(hba);
+			}
 			/* Do not touch lrbp after scsi done */
 			cmd->scsi_done(cmd);
 		} else if (lrbp->command_type == UTP_CMD_TYPE_DEV_MANAGE) {
