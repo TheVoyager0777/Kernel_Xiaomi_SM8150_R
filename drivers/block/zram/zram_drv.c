@@ -1446,8 +1446,10 @@ static ssize_t get_idle_or_new_pages(struct zram *zram,
 	for (index = 0; index < nr_pages; index++) {
 		zram_slot_lock(zram, index);
 
-		if (zram_get_obj_size(zram, index) ||
-				zram_test_flag(zram, index, ZRAM_SAME)) {
+		if (zram_get_obj_size(zram, index) &&
+				!zram_test_flag(zram, index, ZRAM_SAME) &&
+				!zram_test_flag(zram, index, ZRAM_WB) &&
+				!zram_test_flag(zram, index, ZRAM_UNDER_WB)) {
 			idle_count = zram_get_idle_count(zram, index);
 			if (idle_count <= max_idle_count)
 				pages_nr[idle_count]++;
