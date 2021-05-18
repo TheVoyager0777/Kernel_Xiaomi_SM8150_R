@@ -10630,7 +10630,6 @@ set_link_active:
 	if (ufshcd_is_link_hibern8(hba) && !ufshcd_uic_hibern8_exit(hba)) {
 		ufshcd_set_link_active(hba);
 	} else if (ufshcd_is_link_off(hba)) {
-		ufshcd_update_error_stats(hba, UFS_ERR_VOPS_SUSPEND);
 		ufshcd_deassert_device_reset(hba);
 		ufshcd_host_reset_and_restore(hba);
 	}
