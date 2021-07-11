@@ -818,6 +818,7 @@ struct task_struct {
 	atomic_t			usage;
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
+	unsigned int			pc_flags;
 #ifdef CONFIG_HW_CGROUP_WORKINGSET
 	unsigned int                    ext_flags;
 #endif
@@ -1684,6 +1685,13 @@ extern struct pid *cad_pid;
 #define PF_EXT_WSCG_MONITOR	0x00000001	/* I am in a workingset cgroup of monitor*/
 #define PF_EXT_WSCG_PREREAD	0x00000002	/* I am a thread preread workingset by myself */
 #endif
+
+/*
+ * Perf critical flags
+ */
+#define PC_LITTLE_AFFINE		0x00000001
+#define PC_PERF_AFFINE			0x00000002
+#define PC_PRIME_AFFINE		0x00000004
 
 /*
  * Only the _current_ task can read/write to tsk->flags, but other
