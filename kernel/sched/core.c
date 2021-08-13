@@ -2305,6 +2305,10 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 
 	INIT_LIST_HEAD(&p->se.group_node);
 
+#ifdef CONFIG_MIGT
+	migt_monitor_init(p);
+#endif
+
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	p->se.cfs_rq			= NULL;
 #endif

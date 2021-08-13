@@ -7320,6 +7320,7 @@ static inline bool task_fits_capacity(struct task_struct *p,
 
 static inline bool task_fits_max(struct task_struct *p, int cpu)
 {
+        struct root_domain *rd;
 	unsigned long capacity = capacity_orig_of(cpu);
 	unsigned long max_capacity = cpu_rq(cpu)->rd->max_cpu_capacity.val;
 	unsigned long task_boost = per_task_boost(p);
@@ -7335,6 +7336,10 @@ static inline bool task_fits_max(struct task_struct *p, int cpu)
 	} else { /* mid cap cpu */
 		if (task_boost > 1)
 			return false;
+	}
+
+	if (game_vip_task(p)) {
+		return rd->max_cap_orig_cpu;
 	}
 
 	return task_fits_capacity(p, capacity, cpu);
@@ -7763,6 +7768,9 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			target_util = new_util;
 			target_cpu = i;
 		}
+			if (game_vip_task(p) &&
+				(best_idle_cpu != -1 || target_cpu != -1 || best_active_cpu != -1))
+				break;
 
 		next_group_higher_cap = (capacity_orig_of(group_first_cpu(sg)) <
 			capacity_orig_of(group_first_cpu(sg->next)));
@@ -8191,7 +8199,8 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 		 * all if(prefer_idle) blocks.
 		 */
 		prefer_idle = sched_feat(EAS_PREFER_IDLE) ?
-				(schedtune_prefer_idle(p) > 0) : 0;
+				(schedtune_prefer_idle(p) > 0) ||
+                  		game_vip_task(p) : 0;
 
 		eenv->max_cpu_count = EAS_CPU_BKP + 1;
 
@@ -8208,8 +8217,11 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 			goto out;
 
 		/* Immediately return a found idle CPU for a prefer_idle task */
-		if (prefer_idle && idle_cpu(target_cpu))
-			goto out;
+		if ((prefer_idle || game_vip_task(p)) && target_cpu >= 0 && idle_cpu(target_cpu) &&
+			!cpu_isolated(target_cpu))
+			return target_cpu;
+
+
 
 #ifdef CONFIG_SCHED_WALT
 		if (!walt_disabled && sysctl_sched_use_walt_cpu_util &&

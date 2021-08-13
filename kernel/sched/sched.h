@@ -3139,3 +3139,11 @@ struct sched_avg_stats {
 	int nr_max;
 };
 extern void sched_get_nr_running_avg(struct sched_avg_stats *stats);
+
+#ifdef CONFIG_MIGT
+void __weak migt_monitot_init(struct task_struct *tsk)
+{
+	return;
+}
+#endif
+
