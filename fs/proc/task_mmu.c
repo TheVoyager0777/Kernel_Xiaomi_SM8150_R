@@ -33,6 +33,9 @@ module_param(sultan_pid, bool, 0644);
 bool sultan_pid_shrink = false;
 module_param(sultan_pid_shrink, bool, 0644);
 
+bool use_sultan_pid = false;
+module_param(use_sultan_pid, bool, 0644);
+
 #define SEQ_PUT_DEC(str, val) \
 		seq_put_decimal_ull_width(m, str, (val) << (PAGE_SHIFT-10), 8)
 void task_mem(struct seq_file *m, struct mm_struct *mm)
@@ -529,6 +532,11 @@ static int show_vma_header_prefix(struct seq_file *m, unsigned long start,
 	/* Supports printing up to 40 bits per virtual address */
 	BUILD_BUG_ON(CONFIG_ARM64_VA_BITS > 40);
 
+	if (use_sultan_pid)
+	{
+		sultan_pid_shrink = true;
+	}
+
 	if (sultan_pid_shrink)
 	{
 		/* 
@@ -780,6 +788,10 @@ static const struct seq_operations proc_tid_maps_op = {
 
 static int pid_maps_open(struct inode *inode, struct file *file)
 {
+	if (use_sultan_pid)
+	{
+		sultan_pid = true;
+	}
 	if (sultan_pid)
 		return do_maps_open(inode, file, &proc_pid_maps_op_sultanpid);
 	else return do_maps_open(inode, file, &proc_pid_maps_op);
