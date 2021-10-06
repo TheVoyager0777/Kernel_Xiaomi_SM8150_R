@@ -40,7 +40,13 @@
 #include "dsi-panel-samsung-fhd-ea8076-f1p2-2-cmd.dtsi"
 #include "dsi-panel-samsung-fhd-ea8076-f1mp-cmd.dtsi"
 #include "dsi-panel-samsung-fhd-ea8076-f1s-cmd.dtsi"
+<<<<<<< HEAD
 #include "dsi-panel-samsung-fhd-ea8076-cmd.dtsi"
+=======
+#include "dsi-panel-nt36850-truly-dualmipi-wqhd-cmd.dtsi"
+#include "dsi-panel-ss-fhd-ea8076-cmd.dtsi"
+#include "dsi-panel-ss-fhd-ea8076-global-cmd.dtsi"
+>>>>>>> 2a5e47d89e1e4 (ARM64: dts: ea8076: Import dtsi changes from MIUI 12.5)
 #include <dt-bindings/clock/mdss-10nm-pll-clk.h>
 
 /*
@@ -511,6 +517,7 @@
 		qcom,dsi-panel = <&dsi_ss_fhd_ea8076_global_cmd>;
 	};
 
+<<<<<<< HEAD
 	dsi_samsung_fhd_ea8076_f1_cmd_display: qcom,dsi-display@26 {
 		label = "dsi_samsung_fhd_ea8076_f1_cmd_display";
 		qcom,display-type = "primary";
@@ -556,6 +563,10 @@
 	};
 
 	dsi_samsung_fhd_ea8076_f1s_cmd_display: qcom,dsi-display@30 {
+=======
+	dsi_samsung_fhd_ea8076_f1s_cmd_display: qcom,dsi-display@30 {
+
+>>>>>>> 2a5e47d89e1e4 (ARM64: dts: ea8076: Import dtsi changes from MIUI 12.5)
 		label = "dsi_samsung_fhd_ea8076_f1s_cmd_display";
 		qcom,display-type = "primary";
 
@@ -566,6 +577,7 @@
 		qcom,dsi-panel = <&dsi_samsung_fhd_ea8076_f1s_cmd>;
 	};
 
+<<<<<<< HEAD
 	dsi_samsung_fhd_ea8076_cmd_display: qcom,dsi-display@31 {
 		label = "dsi_samsung_fhd_ea8076_cmd_display";
 		qcom,display-type = "primary";
@@ -577,6 +589,8 @@
 		qcom,dsi-panel = <&dsi_samsung_fhd_ea8076_cmd>;
 	};
 
+=======
+>>>>>>> 2a5e47d89e1e4 (ARM64: dts: ea8076: Import dtsi changes from MIUI 12.5)
 	sde_dsi: qcom,dsi-display-primary {
 		compatible = "qcom,dsi-display";
 		label = "primary";
@@ -638,8 +652,14 @@
 			&dsi_samsung_fhd_ea8076_f1mp_cmd_display
 			&dsi_samsung_fhd_ea8076_f1p2_2_cmd_display
 			&dsi_samsung_fhd_ea8076_f1p2_cmd_display
+<<<<<<< HEAD
 			&dsi_samsung_fhd_ea8076_f1s_cmd_display
 			&dsi_samsung_fhd_ea8076_cmd_display>;
+=======
+			&dsi_ss_fhd_ea8076_cmd_display
+			&dsi_ss_fhd_ea8076_global_cmd_display
+			&dsi_samsung_fhd_ea8076_f1s_cmd_display>;
+>>>>>>> 2a5e47d89e1e4 (ARM64: dts: ea8076: Import dtsi changes from MIUI 12.5)
 	};
 
 	sde_dsi1: qcom,dsi-display-secondary {
@@ -1208,3 +1228,21 @@
 		};
 	};
 };
+<<<<<<< HEAD
+=======
+
+&dsi_samsung_fhd_ea8076_f1s_cmd {
+	qcom,mdss-dsi-t-clk-post = <0x1A>;
+	qcom,mdss-dsi-t-clk-pre = <0x1E>;
+	qcom,mdss-dsi-clk-strength = <0xFF>;
+	qcom,mdss-dsi-display-timings {
+		timing@0{
+			qcom,mdss-dsi-panel-phy-timings = [00 24 0A 0A 26 24 0A
+				0A 06 02 04 00 1E 1A];
+			qcom,display-topology = <1 0 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+>>>>>>> 2a5e47d89e1e4 (ARM64: dts: ea8076: Import dtsi changes from MIUI 12.5)
