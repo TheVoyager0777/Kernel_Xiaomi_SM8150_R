@@ -167,7 +167,7 @@ unsigned long list_lru_count_one(struct list_lru *lru,
 	unsigned long count;
 
 	rcu_read_lock();
-	l = list_lru_from_memcg_idx(nlru, memcg_idx);
+	l = list_lru_from_memcg_idx(nlru, memcg_cache_id(memcg));
 	count = l->nr_items;
 	rcu_read_unlock();
 
