@@ -296,6 +296,8 @@ struct sde_encoder_irq {
  * @in_clone_mode		Indicates if encoder is in clone mode ref@CWB
  * @vfp_cached:			cached vertical front porch to be used for
  *				programming ROT and MDP fetch start
+ * @frame_trigger_mode:		frame trigger mode indication for command
+ *				mode display
  */
 struct sde_encoder_phys {
 	struct drm_encoder *parent;
@@ -339,6 +341,7 @@ struct sde_encoder_phys {
 	bool cont_splash_enabled;
 	bool in_clone_mode;
 	int vfp_cached;
+	enum frame_trigger_mode_type frame_trigger_mode;
 };
 
 static inline int sde_encoder_phys_inc_pending(struct sde_encoder_phys *phys)

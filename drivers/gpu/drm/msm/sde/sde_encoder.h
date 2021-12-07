@@ -65,6 +65,7 @@ struct sde_encoder_kickoff_params {
 	u32 is_primary;
 	unsigned long affected_displays;
 	bool recovery_events_enabled;
+    enum frame_trigger_mode_type frame_trigger_mode;
 };
 
 /**
