@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -851,7 +852,8 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 {
 	int rc = 0;
 	u32 num_of_lanes = 0;
-	u32 bpp, frame_time_us;
+		u32 bpp, frame_time_us;
+	u64 refresh_rate = TICKS_IN_MICRO_SECOND;
 	u64 h_period, v_period, bit_rate, pclk_rate, bit_rate_per_lane,
 				byte_clk_rate, byte_intf_clk_rate;
 	struct dsi_host_common_cfg *host_cfg = &config->common_config;
@@ -861,7 +863,7 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	u64 dsi_transfer_time_us = mode->priv_info->dsi_transfer_time_us;
 	u64 min_dsi_clk_hz = mode->priv_info->min_dsi_clk_hz;
 
-	/* Get bits per pxl in desitination format */
+	/* Get bits per pxl in desitnation format */
 	bpp = dsi_ctrl_pixel_format_to_bpp(host_cfg->dst_format);
 	frame_time_us = mult_frac(1000, 1000, (timing->refresh_rate));
 
@@ -877,20 +879,25 @@ static int dsi_ctrl_update_link_freqs(struct dsi_ctrl *dsi_ctrl,
 	if (split_link->split_link_enabled)
 		num_of_lanes = split_link->lanes_per_sublink;
 
-	config->common_config.num_data_lanes = num_of_lanes;
-	config->common_config.bpp = bpp;
+	if (config->bit_clk_rate_hz_override == 0) {
+		if (config->panel_mode == DSI_OP_CMD_MODE) {
+			h_period = DSI_H_ACTIVE_DSC(timing);
+			h_period += timing->overlap_pixels;
+			v_period = timing->v_active;
 
-	if (config->bit_clk_rate_hz_override != 0) {
-		bit_rate = config->bit_clk_rate_hz_override * num_of_lanes;
-	} else if (config->panel_mode == DSI_OP_CMD_MODE) {
-		/* Calculate the bit rate needed to match dsi transfer time */
-		bit_rate = min_dsi_clk_hz * frame_time_us;
-		do_div(bit_rate, dsi_transfer_time_us);
-		bit_rate = bit_rate * num_of_lanes;
+			do_div(refresh_rate, timing->mdp_transfer_time_us);
+		} else {
+			h_period = DSI_H_TOTAL_DSC(timing);
+			v_period = DSI_V_TOTAL(timing);
+			refresh_rate = timing->refresh_rate;
+		}
+		bit_rate = h_period * v_period * refresh_rate * bpp;
 	} else {
-		h_period = DSI_H_TOTAL_DSC(timing);
-		v_period = DSI_V_TOTAL(timing);
-		bit_rate = h_period * v_period * timing->refresh_rate * bpp;
+		bit_rate = config->bit_clk_rate_hz_override * num_of_lanes;
+		if (host_cfg->phy_type == DSI_PHY_TYPE_CPHY) {
+			bit_rate *= bits_per_symbol;
+			do_div(bit_rate, num_of_symbols);
+		}
 	}
 
 	pclk_rate = bit_rate;
@@ -2586,7 +2593,7 @@ static int _dsi_ctrl_setup_isr(struct dsi_ctrl *dsi_ctrl)
 			dsi_ctrl->irq_info.irq_num = irq_num;
 			disable_irq_nosync(irq_num);
 
-			pr_info("[DSI_%d] IRQ %d registered\n",
+			printk_deferred(KERN_INFO"[DSI_%d] IRQ %d registered\n",
 					dsi_ctrl->cell_index, irq_num);
 		}
 	}

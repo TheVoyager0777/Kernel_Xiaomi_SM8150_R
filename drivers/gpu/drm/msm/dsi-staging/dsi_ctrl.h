@@ -230,8 +230,7 @@ struct dsi_ctrl_interrupts {
  * @debugfs_root:        Root for debugfs entries.
  * @misr_enable:         Frame MISR enable/disable
  * @misr_cache:          Cached Frame MISR value
- * @frame_threshold_time_us: Frame threshold time in microseconds, where
- *                       dsi data lane will be idle i.e from pingpong done to
+ * @frame_threshold_time_us: Frame threshold time in microseconds, where dsi data lane will be idle i.e from pingpong done to
  *                       next TE for command mode.
  * @phy_isolation_enabled:    A boolean property allows to isolate the phy from
  *                          dsi controller and run only dsi controller.
@@ -357,7 +356,6 @@ int dsi_ctrl_validate_timing(struct dsi_ctrl *dsi_ctrl,
  * dsi_ctrl_update_host_config() - update dsi host configuration
  * @dsi_ctrl:          DSI controller handle.
  * @config:            DSI host configuration.
- * @mode:              DSI host mode selected.
  * @flags:             dsi_mode_flags modifying the behavior
  * @clk_handle:        Clock handle for DSI clocks
  *

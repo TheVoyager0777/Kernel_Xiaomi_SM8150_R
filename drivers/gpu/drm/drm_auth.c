@@ -165,6 +165,8 @@ static int drm_new_set_master(struct drm_device *dev, struct drm_file *fpriv)
 	if (old_master)
 		drm_master_put(&old_master);
 
+	pr_info("%s: pid=%d, task_name=%s\n", __func__, task_pid_nr(current), current->comm);
+
 	return 0;
 
 out_err:
@@ -265,10 +267,9 @@ int drm_master_open(struct drm_file *file_priv)
 void drm_master_release(struct drm_file *file_priv)
 {
 	struct drm_device *dev = file_priv->minor->dev;
-	struct drm_master *master;
+	struct drm_master *master = file_priv->master;
 
 	mutex_lock(&dev->master_mutex);
-	master = file_priv->master;
 	if (file_priv->magic)
 		idr_remove(&file_priv->master->magic_map, file_priv->magic);
 
