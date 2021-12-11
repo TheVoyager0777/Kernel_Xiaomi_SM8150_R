@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2014 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -25,7 +24,6 @@
 #include "msm_gem.h"
 #include "msm_fence.h"
 #include "sde_trace.h"
-#include "xiaomi_frame_stat.h"
 
 #define MULTIPLE_CONN_DETECTED(x) (x > 1)
 
@@ -75,12 +73,11 @@ EXPORT_SYMBOL(msm_drm_unregister_client);
  * @v: notifier data, inculde display id and display blank
  *     event(unblank or power down).
  */
-int msm_drm_notifier_call_chain(unsigned long val, void *v)
+static int msm_drm_notifier_call_chain(unsigned long val, void *v)
 {
 	return blocking_notifier_call_chain(&msm_drm_notifier_list, val,
 					    v);
 }
-EXPORT_SYMBOL(msm_drm_notifier_call_chain);
 
 /* block until specified crtcs are no longer pending update, and
  * atomically mark them as pending update
@@ -614,8 +611,6 @@ static void complete_commit(struct msm_commit *c)
 static void _msm_drm_commit_work_cb(struct kthread_work *work)
 {
 	struct msm_commit *commit =  NULL;
-	ktime_t start, end;
-	s64 duration;
 
 	if (!work) {
 		DRM_ERROR("%s: Invalid commit work data!\n", __func__);
@@ -624,16 +619,9 @@ static void _msm_drm_commit_work_cb(struct kthread_work *work)
 
 	commit = container_of(work, struct msm_commit, commit_work);
 
-	start = ktime_get();
-	frame_stat_collector(0, COMMIT_START_TS);
-
 	SDE_ATRACE_BEGIN("complete_commit");
 	complete_commit(commit);
 	SDE_ATRACE_END("complete_commit");
-
-	end = ktime_get();
-	duration = ktime_to_ns(ktime_sub(end, start));
-	frame_stat_collector(duration, COMMIT_END_TS);
 }
 
 static struct msm_commit *commit_init(struct drm_atomic_state *state,
