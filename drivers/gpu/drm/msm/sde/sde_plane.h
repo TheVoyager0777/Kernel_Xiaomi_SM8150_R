@@ -401,4 +401,6 @@ void sde_plane_setup_src_split_order(struct drm_plane *plane,
 
 int sde_plane_check_fod_layer(const struct drm_plane_state *drm_state);
 
+
+int sde_plane_is_fod_layer(const struct drm_plane_state *drm_state);
 #endif /* _SDE_PLANE_H_ */

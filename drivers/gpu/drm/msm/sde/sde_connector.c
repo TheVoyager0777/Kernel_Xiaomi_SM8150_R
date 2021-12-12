@@ -607,6 +607,39 @@ static int _sde_connector_update_dirty_properties(
 	return 0;
 }
 
+void sde_connector_update_fod_hbm(struct drm_connector *connector)
+{
+	static atomic_t effective_status = ATOMIC_INIT(false);
+	struct sde_crtc_state *cstate;
+	struct sde_connector *c_conn;
+	struct dsi_display *display;
+	bool status;
+
+	if (!connector) {
+		SDE_ERROR("invalid connector\n");
+		return;
+	}
+
+	c_conn = to_sde_connector(connector);
+	if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI)
+		return;
+
+	display = (struct dsi_display *) c_conn->display;
+
+	if (!c_conn->encoder || !c_conn->encoder->crtc ||
+			!c_conn->encoder->crtc->state)
+		return;
+
+	cstate = to_sde_crtc_state(c_conn->encoder->crtc->state);
+	status = cstate->fod_dim_layer != NULL;
+	if (atomic_xchg(&effective_status, status) == status)
+		return;
+
+	mutex_lock(&display->panel->panel_lock);
+	dsi_panel_set_fod_hbm(display->panel, status);
+	mutex_unlock(&display->panel->panel_lock);
+}
+
 static int dsi_display_write_panel(struct dsi_display *display,
 				struct dsi_panel_cmd_set *cmd_sets)
 {
@@ -915,7 +948,6 @@ void sde_connector_fod_notify(struct drm_connector *conn)
 
 }
 
-
 int sde_connector_pre_kickoff(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn;
@@ -949,6 +981,8 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 
 	SDE_EVT32_VERBOSE(connector->base.id);
 
+    sde_connector_update_fod_hbm(connector);
+    
 	rc = c_conn->ops.pre_kickoff(connector, c_conn->display, &params);
 
 end:
