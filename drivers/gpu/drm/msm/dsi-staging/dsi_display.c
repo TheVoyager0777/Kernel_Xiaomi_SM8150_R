@@ -60,6 +60,12 @@ static const struct of_device_id dsi_display_dt_match[] = {
 	{}
 };
 
+static inline bool is_lp_mode(int power_mode)
+{
+	return power_mode == SDE_MODE_DPMS_LP1 ||
+			power_mode == SDE_MODE_DPMS_LP2;
+}
+
 static void dsi_display_mask_ctrl_error_interrupts(struct dsi_display *display,
 			u32 mask, bool enable)
 {
@@ -1059,27 +1065,34 @@ int dsi_display_set_power(struct drm_connector *connector,
 		int power_mode, void *disp)
 {
 	struct dsi_display *display = disp;
+	struct msm_drm_notifier notify_data;
 	int rc = 0;
 
 	if (!display || !display->panel) {
 		pr_err("invalid display/panel\n");
 		return -EINVAL;
 	}
-
-	notify_data.data = &event;
+	
+    notify_data.data = &power_mode;
+	notify_data.id = MSM_DRM_PRIMARY_DISPLAY;
 
 	switch (power_mode) {
 	case SDE_MODE_DPMS_LP1:
+		msm_drm_notifier_call_chain(MSM_DRM_EARLY_EVENT_BLANK, &notify_data);
 		rc = dsi_panel_set_lp1(display->panel);
 		msm_drm_notifier_call_chain(MSM_DRM_EVENT_BLANK, &notify_data);
 		break;
 	case SDE_MODE_DPMS_LP2:
+		msm_drm_notifier_call_chain(MSM_DRM_EARLY_EVENT_BLANK, &notify_data);
 		rc = dsi_panel_set_lp2(display->panel);
+		msm_drm_notifier_call_chain(MSM_DRM_EVENT_BLANK, &notify_data);
 		break;
 	case SDE_MODE_DPMS_ON:
-		if (display->panel->power_mode == SDE_MODE_DPMS_LP1 ||
-			display->panel->power_mode == SDE_MODE_DPMS_LP2)
+		if (is_lp_mode(display->panel->power_mode)){
+			msm_drm_notifier_call_chain(MSM_DRM_EARLY_EVENT_BLANK, &notify_data);
 			rc = dsi_panel_set_nolp(display->panel);
+			msm_drm_notifier_call_chain(MSM_DRM_EVENT_BLANK, &notify_data);
+		}
 		break;
 	case SDE_MODE_DPMS_OFF:
 	default:

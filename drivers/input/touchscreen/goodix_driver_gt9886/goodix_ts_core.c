@@ -30,6 +30,7 @@
 #ifdef CONFIG_DRM
 #include <linux/msm_drm_notify.h>
 #include <linux/notifier.h>
+#include <linux/fb.h>
 #endif
 #include <linux/uaccess.h>
 #include <linux/proc_fs.h>
@@ -44,6 +45,22 @@
 #include "../xiaomi/xiaomi_touch.h"
 #include "test_core/test_param_init.h"
 
+#define INPUT_EVENT_START						0
+#define INPUT_EVENT_SENSITIVE_MODE_OFF			0
+#define INPUT_EVENT_SENSITIVE_MODE_ON			1
+#define INPUT_EVENT_STYLUS_MODE_OFF				2
+#define INPUT_EVENT_STYLUS_MODE_ON				3
+#define INPUT_EVENT_WAKUP_MODE_OFF				4
+#define INPUT_EVENT_WAKUP_MODE_ON				5
+#define INPUT_EVENT_COVER_MODE_OFF				6
+#define INPUT_EVENT_COVER_MODE_ON				7
+#define INPUT_EVENT_SLIDE_FOR_VOLUME			8
+#define INPUT_EVENT_DOUBLE_TAP_FOR_VOLUME		9
+#define INPUT_EVENT_SINGLE_TAP_FOR_VOLUME		10
+#define INPUT_EVENT_LONG_SINGLE_TAP_FOR_VOLUME	11
+#define INPUT_EVENT_PALM_OFF					12
+#define INPUT_EVENT_PALM_ON						13
+#define INPUT_EVENT_END							13
 #define IS_USB_EXIST							0x06
 #define IS_USB_NOT_EXIST						0x07
 
@@ -306,7 +323,6 @@ static int goodix_debugfs_init(void)
 	goodix_dbg.dentry = r_b;
 
 exit:
-	kfree(goodix_dbg.buf.data);
 	return 0;
 }
 
@@ -792,7 +808,7 @@ int goodix_ts_unregister_notifier(struct notifier_block *nb)
 EXPORT_SYMBOL(goodix_ts_unregister_notifier);
 
 /**
- * msm_drm_notifier_call_chain - notify clients of msm_drm_notifier
+ * fb_notifier_call_chain - notify clients of fb_events
  * see enum ts_notify_event in goodix_ts_core.h
  */
 int goodix_ts_blocking_notify(enum ts_notify_event evt, void *v)
@@ -1281,6 +1297,62 @@ static DEVICE_ATTR(fod_test, (S_IRUGO | S_IWUSR | S_IWGRP),
 static DEVICE_ATTR(touch_suspend_notify, (S_IRUGO | S_IRGRP),
 			gtp_touch_suspend_notify_show, NULL);
 
+static void goodix_switch_mode_work(struct work_struct *work)
+{
+	struct goodix_mode_switch *ms =
+		container_of(work, struct goodix_mode_switch, switch_mode_work);
+
+	struct goodix_ts_core *info = ms->info;
+	unsigned char value = ms->mode;
+
+#ifdef CONFIG_GOODIX_HWINFO
+	char ch[16] = { 0x0, };
+#endif
+	if (value >= INPUT_EVENT_WAKUP_MODE_OFF
+		&& value <= INPUT_EVENT_WAKUP_MODE_ON) {
+		info->double_wakeup = value - INPUT_EVENT_WAKUP_MODE_OFF;
+		info->gesture_enabled = info->double_wakeup | info->fod_status;
+		/*goodix_gesture_enable(!!info->gesture_enabled);*/
+#ifdef CONFIG_GOODIX_HWINFO
+		snprintf(ch, sizeof(ch), "%s", info->gesture_enabled ? "enabled" : "disabled");
+#endif
+	}
+}
+
+static int goodix_input_event(struct input_dev *dev, unsigned int type,
+		unsigned int code, int value)
+{
+	struct goodix_ts_core *core_data = input_get_drvdata(dev);
+	struct goodix_mode_switch *ms;
+
+	if (!core_data) {
+		ts_err("core_data is NULL");
+		return 0;
+	}
+
+	if (type == EV_SYN && code == SYN_CONFIG) {
+		if (value >= INPUT_EVENT_START && value <= INPUT_EVENT_END) {
+			ms = (struct goodix_mode_switch *)
+				kmalloc(sizeof(struct goodix_mode_switch), GFP_ATOMIC);
+			if (ms != NULL) {
+				ms->info = core_data;
+				ms->mode = (unsigned char)value;
+				INIT_WORK(&ms->switch_mode_work,
+					goodix_switch_mode_work);
+				schedule_work(&ms->switch_mode_work);
+			} else {
+				ts_err("failed in allocating memory for switching mode");
+				return -ENOMEM;
+			}
+		} else {
+			ts_err("Invalid event value");
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+
 /**
  * goodix_input_set_params - set input parameters
  */
@@ -1340,6 +1412,7 @@ int goodix_ts_input_dev_config(struct goodix_ts_core *core_data)
 	input_dev->id.product = 0xDEAD;
 	input_dev->id.vendor = 0xBEEF;
 	input_dev->id.version = 10427;
+	input_dev->event = goodix_input_event;
 
 	__set_bit(EV_SYN, input_dev->evbit);
 	__set_bit(EV_KEY, input_dev->evbit);
@@ -1566,7 +1639,7 @@ int goodix_ts_esd_init(struct goodix_ts_core *core)
  * goodix_ts_suspend - Touchscreen suspend function
  * Called by PM/FB/EARLYSUSPEN module to put the device to  sleep
  */
-int goodix_ts_suspend_lock(struct goodix_ts_core *core_data, bool lock)
+int goodix_ts_suspend(struct goodix_ts_core *core_data)
 {
 	struct goodix_ext_module *ext_module;
 	struct goodix_ts_device *ts_dev = core_data->ts_dev;
@@ -1574,11 +1647,7 @@ int goodix_ts_suspend_lock(struct goodix_ts_core *core_data, bool lock)
 
 	ts_info("Suspend start");
 
-	if (lock) {
-		mutex_lock(&core_data->work_stat);
-		ts_info("locked work_stat mutex");
-	}
-
+	mutex_lock(&core_data->work_stat);
 	if (atomic_read(&core_data->suspend_stat)) {
 		ts_info("suspended, skip");
 		goto out;
@@ -1661,25 +1730,17 @@ out:
 	sysfs_notify(&core_data->gtp_touch_dev->kobj, NULL,
 		     "touch_suspend_notify");
 
-	if (lock) {
-		ts_info("unlocking work_stat mutex");
-		mutex_unlock(&core_data->work_stat);
-	}
+	mutex_unlock(&core_data->work_stat);
 
 	ts_info("Suspend end");
 	return 0;
-}
-
-int goodix_ts_suspend(struct goodix_ts_core *core_data)
-{
-	return goodix_ts_suspend_lock(core_data, true);
 }
 
 /**
  * goodix_ts_resume - Touchscreen resume function
  * Called by PM/FB/EARLYSUSPEN module to wakeup device
  */
-int goodix_ts_resume_lock(struct goodix_ts_core *core_data, bool lock)
+int goodix_ts_resume(struct goodix_ts_core *core_data)
 {
 	struct goodix_ext_module *ext_module;
 	struct goodix_ts_device *ts_dev = core_data->ts_dev;
@@ -1687,12 +1748,7 @@ int goodix_ts_resume_lock(struct goodix_ts_core *core_data, bool lock)
 
 	ts_info("Resume start");
 	/*goodix_ts_irq_enable(core_data, false);*/
-
-	if (lock) {
-		mutex_lock(&core_data->work_stat);
-		ts_info("locked work_stat mutex");
-	}
-
+	mutex_lock(&core_data->work_stat);
 	if (!atomic_read(&core_data->suspend_stat)) {
 		ts_info("resumed, skip");
 		/*goodix_ts_irq_enable(core_data, true);*/
@@ -1764,18 +1820,10 @@ out:
 	sysfs_notify(&core_data->gtp_touch_dev->kobj, NULL,
 		     "touch_suspend_notify");
 
-	if (lock) {
-		ts_info("unlocking work_stat mutex");
-		mutex_unlock(&core_data->work_stat);
-	}
+	mutex_unlock(&core_data->work_stat);
 
 	ts_info("Resume end");
 	return 0;
-}
-
-int goodix_ts_resume(struct goodix_ts_core *core_data)
-{
-	return goodix_ts_resume_lock(core_data, true);
 }
 
 static int goodix_bl_state_chg_callback(struct notifier_block *nb, unsigned long val, void *data)
@@ -1798,23 +1846,23 @@ static int goodix_bl_state_chg_callback(struct notifier_block *nb, unsigned long
 
 #ifdef CONFIG_DRM
 /**
- * goodix_ts_msm_drm_notifier_callback - msm drm notifier callback
- * Called by kernel during drm blanck/unblank phrase
+ * goodix_ts_fb_notifier_callback - Framebuffer notifier callback
+ * Called by kernel during framebuffer blanck/unblank phrase
  */
-int goodix_ts_msm_drm_notifier_callback(struct notifier_block *self,
+int goodix_ts_fb_notifier_callback(struct notifier_block *self,
 	unsigned long event, void *data)
 {
 	struct goodix_ts_core *core_data =
-		container_of(self, struct goodix_ts_core, msm_drm_notifier);
-	struct msm_drm_notifier *msm_drm_event = data;
+		container_of(self, struct goodix_ts_core, fb_notifier);
+	struct msm_drm_notifier *fb_event = data;
 	int blank;
 
-	if (msm_drm_event && msm_drm_event->data && core_data) {
-		blank = *(int *)(msm_drm_event->data);
+	if (fb_event && fb_event->data && core_data) {
+		blank = *(int *)(fb_event->data);
 		flush_workqueue(core_data->event_wq);
 		if (event == MSM_DRM_EVENT_BLANK && (blank == MSM_DRM_BLANK_POWERDOWN ||
 			blank == MSM_DRM_BLANK_LP1 || blank == MSM_DRM_BLANK_LP2)) {
-			ts_info("touchpanel suspend .....blank=%d\n", blank);
+			ts_info("touchpanel suspend .....blank=%d\n",blank);
 			ts_info("touchpanel suspend .....suspend_stat=%d\n", atomic_read(&core_data->suspend_stat));
 			if (atomic_read(&core_data->suspend_stat))
 				return 0;
@@ -2265,40 +2313,15 @@ static int gtp_set_cur_value(int gtp_mode, int gtp_value)
 	u8 temp_value = 0;
 	int ret = 0;
 	int i = 0;
-	bool suspended;
 
 	struct goodix_ts_device *dev = goodix_core_data->ts_dev;
-
-	ts_info("mode:%d, value:%d", gtp_mode, gtp_value);
-
-	if (gtp_mode == Touch_Doubletap_Mode && goodix_core_data && gtp_value >= 0) {
-		goodix_core_data->double_wakeup = gtp_value;
-		goodix_core_data->gesture_enabled = goodix_core_data->double_wakeup | goodix_core_data->aod_status;
-		return 0;
-	}
-
-	if (gtp_mode == Touch_Fod_Enable && goodix_core_data) {
-		mutex_lock(&goodix_core_data->work_stat);
-		ts_info("locked work_stat mutex");
-		suspended = atomic_read(&goodix_core_data->suspended);
-		if (suspended) {
-			goodix_ts_resume_lock(goodix_core_data, false);
-		}
+/*
+	if (gtp_mode == Touch_Fod_Enable && goodix_core_data && gtp_value >= 0) {
+		ts_info("set fod status");
 		goodix_core_data->fod_status = gtp_value;
-		if (goodix_core_data->fod_status == -1 || goodix_core_data->fod_status == 100) {
-			goodix_core_data->fod_enabled = false;
-			goodix_core_data->gesture_enabled = goodix_core_data->double_wakeup |
-				goodix_core_data->aod_status | goodix_core_data->fod_enabled;
-		} else {
-			goodix_core_data->fod_enabled = true;
-			goodix_core_data->gesture_enabled = goodix_core_data->double_wakeup |
-				goodix_core_data->fod_enabled | goodix_core_data->aod_status;
-		}
-		if (suspended) {
-			goodix_ts_suspend_lock(goodix_core_data, false);
-		}
-		ts_info("unlocking work_stat mutex");
-		mutex_unlock(&goodix_core_data->work_stat);
+		goodix_core_data->gesture_enabled = goodix_core_data->double_wakeup |
+			goodix_core_data->fod_status | goodix_core_data->aod_status;
+		goodix_check_gesture_stat(!!goodix_core_data->fod_status);
 		return 0;
 	}
 	if (gtp_mode == Touch_Aod_Enable && goodix_core_data && gtp_value >= 0) {
@@ -2715,7 +2738,7 @@ static int goodix_ts_remove(struct platform_device *pdev)
 {
 	struct goodix_ts_core *core_data = platform_get_drvdata(pdev);
 #ifdef CONFIG_DRM
-	msm_drm_unregister_client(&core_data->msm_drm_notifier);
+	msm_drm_unregister_client(&core_data->fb_notifier);
 #endif
 	//wake_lock_destroy(&core_data->tp_wakelock);
 	power_supply_unreg_notifier(&core_data->power_supply_notifier);
