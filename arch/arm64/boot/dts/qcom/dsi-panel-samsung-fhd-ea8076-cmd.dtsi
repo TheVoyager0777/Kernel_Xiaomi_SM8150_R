@@ -59,19 +59,35 @@
 
 		qcom,dispparam-enabled;
 		qcom,mdss-panel-on-dimming-delay = <120>;
-		qcom,disp-doze-backlight-threshold = <8>;
+		qcom,disp-doze-lpm-backlight = <20>;
+		qcom,disp-doze-hbm-backlight = <266>;
+		qcom,disp-fod-dim-lut = <
+			/* brightness, alpha */
+			0	0xFF
+			4	0xEB
+			8	0xEA
+			12	0xE9
+			13	0xE8
+			20	0xE5
+			24	0xE3
+			30	0xE0
+			68	0xD0
+			133	0xC0
+			218	0xB0
+			328	0xA0
+			486	0x90
+			642	0x80
+			832	0x70
+			1043	0x60
+			1267	0x50
+			1500	0x40
+			1770	0x30
+			2000	0x24
+			2047	0x21
+		>;
+		
 		/* IRQF_ONESHOT | IRQF_TRIGGER_FALLING */
 		qcom,esd-err-irq-gpio = <&tlmm 27 0x2002>;
-
-		qcom,mdss-dsi-t-clk-post = <26>;
-		qcom,mdss-dsi-t-clk-pre = <30>;
-		qcom,panel-supply-entries = <25>;
-		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
-		qcom,mdss-dsi-bl-min-level = <2>;
-		qcom,mdss-dsi-bl-max-level = <2047>;
-		qcom,mdss-dsi-mode-sel-gpio-state = "single_port";
-		qcom,platform-te-gpio = <&tlmm 8 0x00>;
-		qcom,platform-reset-gpio = <&tlmm 6 0x00>;
 
 		qcom,mdss-dsi-display-timings {
 			timing@0{
@@ -183,22 +199,14 @@
 				qcom,mdss-dsi-dispparam-hbm-on-command = [39 01 00 00 00 00 02 53 E8];
 				qcom,mdss-dsi-dispparam-hbm-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-dispparam-hbm-fod-off-command = [
-									39 01 00 00 00 00 02 53 20
-									39 00 00 00 00 00 03 F0 5A 5A
-									39 00 00 00 00 00 03 B7 01 4B
-									39 00 00 00 00 00 02 B0 03
-									39 00 00 00 00 00 02 B7 49
-									39 01 00 00 01 00 03 F0 A5 A5];
-				qcom,mdss-dsi-dispparam-hbm-fod-off-command-state = "dsi_lp_mode";
+					15 01 00 00 10 00 02 53 20];
+				qcom,mdss-dsi-dispparam-hbm-fod-off-command-state = "dsi_hs_mode";
 				qcom,mdss-dsi-dispparam-hbm-fod-on-command = [
-									39 00 00 00 00 00 03 F0 5A 5A
-									39 00 00 00 00 00 02 B0 03
-									39 00 00 00 00 00 02 B7 C9
-									39 01 00 00 00 00 03 F0 A5 A5
-									39 01 00 00 01 00 02 53 E0
-									39 00 00 00 00 00 03 F0 5A 5A
-									39 00 00 00 00 00 03 B7 01 43
-									39 01 00 00 01 00 03 F0 A5 A5];
+					39 00 00 00 00 00 03 F0 5A 5A
+					15 00 00 00 00 00 02 B0 03
+					15 00 00 00 00 00 02 B7 C9
+					39 00 00 00 00 00 03 F0 A5 A5
+					15 01 00 00 10 00 02 53 E0];
 				qcom,mdss-dsi-dispparam-hbm-fod-on-command-state = "dsi_lp_mode";
 				qcom,mdss-dsi-dispparam-hbm-fod2norm-command = [39 00 00 00 00 00 03 F0 5A 5A
 									39 00 00 00 00 00 03 B2 00 40
