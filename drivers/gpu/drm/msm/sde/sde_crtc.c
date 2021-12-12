@@ -5776,16 +5776,6 @@ static int sde_crtc_atomic_check(struct drm_crtc *crtc,
 		}
 	}
 
-	/*
-	 * mi layer check
-	 *	 need execute only sde_enc->disp_info.is_primary is true
-	*/
-
-	rc = sde_crtc_fod_atomic_check(cstate, pstates, cnt);
-	if (rc)
-		goto end;
-
-
     sde_crtc_fod_atomic_check(cstate, pstates, cnt);
 
 	/* assign mixer stages based on sorted zpos property */
