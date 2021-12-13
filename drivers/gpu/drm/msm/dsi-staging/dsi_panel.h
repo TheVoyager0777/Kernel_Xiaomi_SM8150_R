@@ -63,7 +63,6 @@ enum dsi_backlight_type {
 enum dsi_doze_mode_type {
 	DSI_DOZE_LPM = 0,
 	DSI_DOZE_HBM,
-	DSI_DOZE_DARK,
 };
 
 enum bl_update_flag {
@@ -206,12 +205,6 @@ struct dsi_read_config {
 	u8 rbuf[64];
 };
 
-#define BRIGHTNESS_ALPHA_PAIR_LEN 2
-struct brightness_alpha_pair {
-	u32 brightness;
-	u32 alpha;
-};
-
 struct dsi_panel {
 	const char *name;
 	const char *type;
@@ -268,10 +261,6 @@ struct dsi_panel {
 
 	bool doze_enabled;
 	enum dsi_doze_mode_type doze_mode;
-	
-	
-	struct brightness_alpha_pair *fod_dim_lut;
-	u32 fod_dim_lut_count;
 
 	int hbm_mode;
 	
@@ -488,7 +477,4 @@ int dsi_panel_set_fod_hbm(struct dsi_panel *panel, bool status);
 int dsi_panel_apply_hbm_mode(struct dsi_panel *panel);
 
 int dsi_panel_apply_dc_mode(struct dsi_panel *panel);
-
-u32 dsi_panel_get_fod_dim_alpha(struct dsi_panel *panel);
-
 #endif /* _DSI_PANEL_H_ */
