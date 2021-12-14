@@ -2779,14 +2779,6 @@ int smblib_get_prop_batt_charge_done(struct smb_charger *chg,
 	return 0;
 }
 
-int smblib_get_prop_battery_charging_enabled(struct smb_charger *chg,
-					union power_supply_propval *val)
-{
-	val->intval = !(get_client_vote(chg->usb_icl_votable, MAIN_CHG_VOTER)
-			== MAIN_CHARGER_STOP_ICL);
-	return 0;
-}
-
 int smblib_get_prop_battery_charging_limited(struct smb_charger *chg,
 					union power_supply_propval *val)
 {
