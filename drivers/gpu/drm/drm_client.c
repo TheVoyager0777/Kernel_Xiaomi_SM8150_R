@@ -357,7 +357,6 @@ void drm_client_buffer_vunmap(struct drm_client_buffer *buffer)
 	buffer->vaddr = NULL;
 }
 EXPORT_SYMBOL(drm_client_buffer_vunmap);
->>>>>>> 294876e6c98e0c2302b7de54434e06d219d8411e
 
 static void drm_client_buffer_rmfb(struct drm_client_buffer *buffer)
 {
