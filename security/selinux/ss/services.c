@@ -70,15 +70,8 @@
 #include "ebitmap.h"
 #include "audit.h"
 
-/* Policy capability names */
-const char *selinux_policycap_names[__POLICYDB_CAPABILITY_MAX] = {
-	"network_peer_controls",
-	"open_perms",
-	"extended_socket_class",
-	"always_check_network",
-	"cgroup_seclabel",
-	"nnp_nosuid_transition"
-};
+int selinux_android_netlink_route;
+int selinux_android_netlink_getneigh;
 
 static struct selinux_ss selinux_ss;
 

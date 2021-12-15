@@ -3195,8 +3195,9 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 	__u32 crc = 0;
 
 	if (le32_to_cpu(raw_super->magic) != F2FS_SUPER_MAGIC) {
-		f2fs_info(sbi, "Magic Mismatch, valid(0x%x) - read(0x%x)",
-			  F2FS_SUPER_MAGIC, le32_to_cpu(raw_super->magic));
+		f2fs_warn(sbi, KERN_INFO,
+			"Magic Mismatch, valid(0x%x) - read(0x%x)",
+			F2FS_SUPER_MAGIC, le32_to_cpu(raw_super->magic));
 		return -EINVAL;
 	}
 
@@ -3205,15 +3206,25 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 		crc_offset = le32_to_cpu(raw_super->checksum_offset);
 		if (crc_offset !=
 			offsetof(struct f2fs_super_block, crc)) {
-			f2fs_info(sbi, "Invalid SB checksum offset: %zu",
-				  crc_offset);
+			f2fs_warn(sbi, KERN_INFO,
+				"Invalid SB checksum offset: %zu",
+				crc_offset);
 			return -EFSCORRUPTED;
 		}
 		crc = le32_to_cpu(raw_super->crc);
 		if (!f2fs_crc_valid(sbi, crc, raw_super, crc_offset)) {
-			f2fs_info(sbi, "Invalid SB checksum value: %u", crc);
+			f2fs_warn(sbi, KERN_INFO,
+				"Invalid SB checksum value: %u", crc);
 			return -EFSCORRUPTED;
 		}
+	}
+
+	/* Currently, support only 4KB page cache size */
+	if (F2FS_BLKSIZE != PAGE_SIZE) {
+		f2fs_warn(sbi, KERN_INFO,
+			"Invalid page_cache_size (%lu), supports only 4KB\n",
+			PAGE_SIZE);
+		return -EFSCORRUPTED;
 	}
 
 	/* Currently, support only 4KB block size */
