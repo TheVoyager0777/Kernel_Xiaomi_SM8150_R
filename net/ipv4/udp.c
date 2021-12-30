@@ -134,6 +134,8 @@ EXPORT_SYMBOL(udp_memory_allocated);
 
 #define MAX_UDP_PORTS 65536
 #define PORTS_PER_CHAIN (MAX_UDP_PORTS / UDP_HTABLE_SIZE_MIN)
+//MAX_UDP_RCVBUF_COUNT
+#define MAX_UDP_RCVBUF_COUNT 2
 
 /* IPCB reference means this can not be used from early demux */
 static bool udp_lib_exact_dif_match(struct net *net, struct sk_buff *skb)
@@ -1381,8 +1383,14 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	 * queue is full; always allow at least a packet
 	 */
 	rmem = atomic_read(&sk->sk_rmem_alloc);
-	if (rmem > sk->sk_rcvbuf)
-		goto drop;
+	if (rmem > sk->sk_rcvbuf) {
+		if (sk->sk_rcvbuf < sysctl_rmem_max) {
+			sk->sk_rcvbuf = min(sk->sk_rcvbuf * MAX_UDP_RCVBUF_COUNT, (int)sysctl_rmem_max);
+		}
+
+		if (rmem > sk->sk_rcvbuf)
+			goto drop;
+	}
 
 	/* Under mem pressure, it might be helpful to help udp_recvmsg()
 	 * having linear skbs :

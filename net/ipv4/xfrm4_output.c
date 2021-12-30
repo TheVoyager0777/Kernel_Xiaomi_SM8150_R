@@ -18,6 +18,8 @@
 #include <net/xfrm.h>
 #include <net/icmp.h>
 
+#include <net/patchcodeid.h>
+
 static int xfrm4_tunnel_check_size(struct sk_buff *skb)
 {
 	int mtu, ret = 0;
@@ -81,6 +83,15 @@ int xfrm4_output_finish(struct sock *sk, struct sk_buff *skb)
 	return xfrm_output(sk, skb);
 }
 
+/* 2018-03-16 gihong.jang@lge.com LGP_DATA_KERNEL_XFRM_FRAG_ESP [START]*/
+#ifdef CONFIG_XFRM_FRAG_ESP_BEFORE_TUNNEL_ENC
+static int __xfrm4_output_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
+{
+	struct xfrm_state *x = skb_dst(skb)->xfrm;
+	return x->outer_mode->afinfo->output_finish(sk, skb);
+}
+#endif
+/* 2018-03-16 gihong.jang@lge.com LGP_DATA_KERNEL_XFRM_FRAG_ESP [END]*/
 static int __xfrm4_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct xfrm_state *x = skb_dst(skb)->xfrm;
@@ -91,6 +102,41 @@ static int __xfrm4_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 		return dst_output(net, sk, skb);
 	}
 #endif
+
+/* 2018-03-16 gihong.jang@lge.com LGP_DATA_KERNEL_XFRM_FRAG_ESP [START]*/
+#ifdef CONFIG_XFRM_FRAG_ESP_BEFORE_TUNNEL_ENC
+	patch_code_id("LPCP-2381@n@c@vmlinux@xfrm4_output.c@1");
+	if (x->props.mode == XFRM_MODE_TUNNEL &&
+			skb != NULL && skb->protocol == htons(ETH_P_IP) &&
+			skb->sk != NULL && skb->sk->sk_protocol != IPPROTO_TCP &&
+			skb_dst(skb)->next != NULL && skb_dst(skb)->next->xfrm != NULL &&
+			!(skb_dst(skb)->next->xfrm->outer_mode->flags & XFRM_MODE_FLAG_TUNNEL)) {
+		int mtu;
+		bool toobig;
+
+		if (skb->protocol == htons(ETH_P_IP)) {
+			mtu = ip_skb_dst_mtu(sk,skb);
+		} else {
+			mtu = dst_mtu(skb_dst(skb));
+		}
+
+		toobig = skb->len > mtu && !skb_is_gso(skb);
+
+		if (toobig && (ip_hdr(skb)->frag_off & htons(IP_DF))) {
+			xfrm_local_error(skb, mtu);
+			return -EMSGSIZE;
+		} else if (!skb->ignore_df && toobig && skb->sk) {
+			xfrm_local_error(skb, mtu);
+			return -EMSGSIZE;
+		}
+
+		if (toobig || dst_allfrag(skb_dst(skb))) {
+			printk("XFRM_FRAG_ESP_BEFORE_TUNNEL_ENC go fragment\n");
+			return ip_do_fragment(net, sk, skb, __xfrm4_output_finish);
+		}
+	}
+#endif
+/* 2018-03-16 gihong.jang@lge.com LGP_DATA_KERNEL_XFRM_FRAG_ESP [END]*/
 
 	return x->outer_mode->afinfo->output_finish(sk, skb);
 }

@@ -114,6 +114,7 @@
 #include <net/secure_seq.h>
 #include <net/ip_tunnels.h>
 #include <net/l3mdev.h>
+#include <net/patchcodeid.h>
 
 #include "fib_lookup.h"
 
