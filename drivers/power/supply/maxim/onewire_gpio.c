@@ -22,9 +22,9 @@
 #include <linux/device.h>
 #include <linux/spinlock.h>
 
-#define ow_info	pr_info
-#define ow_dbg	pr_debug
-#define ow_err	pr_debug
+#define ow_info	pr_err
+#define ow_dbg	pr_err
+#define ow_err	pr_err
 #define ow_log	pr_err
 
 #define DRV_STRENGTH_16MA		(0x7 << 6)
@@ -35,8 +35,8 @@
 #define OUTPUT_HIGH				(0x1 << 1)
 #define OUTPUT_LOW				0x1
 
-#define ONE_WIRE_CONFIG_OUT		writel_relaxed(DRV_STRENGTH_4MA | GPIO_OUTPUT | GPIO_PULL_UP, g_onewire_data->gpio_cfg66_reg)// OUT
-#define ONE_WIRE_CONFIG_IN		writel_relaxed(DRV_STRENGTH_4MA | GPIO_INPUT | GPIO_PULL_UP, g_onewire_data->gpio_cfg66_reg)// IN
+#define ONE_WIRE_CONFIG_OUT		writel_relaxed(DRV_STRENGTH_16MA | GPIO_OUTPUT | GPIO_PULL_UP, g_onewire_data->gpio_cfg66_reg)// OUT
+#define ONE_WIRE_CONFIG_IN		writel_relaxed(DRV_STRENGTH_16MA | GPIO_INPUT | GPIO_PULL_UP, g_onewire_data->gpio_cfg66_reg)// IN
 #define ONE_WIRE_OUT_HIGH		writel_relaxed(OUTPUT_HIGH, g_onewire_data->gpio_in_out_reg)// OUT: 1
 #define ONE_WIRE_OUT_LOW		writel_relaxed(OUTPUT_LOW, g_onewire_data->gpio_in_out_reg)// OUT: 0
 
@@ -392,7 +392,7 @@ static int onewire_gpio_probe(struct platform_device *pdev)
 
 	if (!pdev->dev.of_node || !of_device_is_available(pdev->dev.of_node))
 		return -ENODEV;
-
+	ow_log("lvchen1\n");
 	if (pdev->dev.of_node) {
 		onewire_data = devm_kzalloc(&pdev->dev,
 			sizeof(struct onewire_gpio_data),
@@ -401,21 +401,22 @@ static int onewire_gpio_probe(struct platform_device *pdev)
 			ow_err("Failed to allocate memory\n");
 			return -ENOMEM;
 		}
-
+	ow_log("lvchen2\n");
 		retval = onewire_gpio_parse_dt(&pdev->dev, onewire_data);
 		if (retval) {
 			retval = -EINVAL;
+		ow_log("lvchen3\n");
 			goto onewire_parse_dt_err;
 		}
 	} else {
 		onewire_data = pdev->dev.platform_data;
 	}
-
+	ow_log("lvchen4\n");
 	if (!onewire_data) {
 		ow_err("No platform data found\n");
 		return -EINVAL;
 	}
-
+	ow_log("lvchen5\n");
 	g_onewire_data = onewire_data;
 	onewire_data->pdev = pdev;
 	platform_set_drvdata(pdev, onewire_data);
@@ -432,8 +433,9 @@ static int onewire_gpio_probe(struct platform_device *pdev)
 	}
 	if (retval)
 		goto onewire_pinctrl_err;
-
+	ow_log("lvchen6\n");
 	// request onewire gpio
+	gpio_free(onewire_data->ow_gpio);
 	if (gpio_is_valid(onewire_data->ow_gpio)) {
 		retval = gpio_request(onewire_data->ow_gpio,
 						"onewire gpio");
@@ -445,20 +447,20 @@ static int onewire_gpio_probe(struct platform_device *pdev)
 				retval);
 		goto onewire_ow_gpio_err;
 	}
-
+	ow_log("lvchen7\n");
 	// gpio output 1
 	gpio_direction_output(onewire_data->ow_gpio, 1);
 
 	onewire_data->ow_gpio_desc = gpio_to_desc(onewire_data->ow_gpio);
 	onewire_data->ow_gpio_chip = gpiod_to_chip(onewire_data->ow_gpio_desc);
-	
+
 	onewire_data->gpio_in_out_reg = devm_ioremap(&pdev->dev,
 					(uint32_t)onewire_data->onewire_gpio_level_addr, 0x4);
 	onewire_data->gpio_cfg66_reg = devm_ioremap(&pdev->dev,
 					(uint32_t)onewire_data->onewire_gpio_cfg_addr, 0x4);
 	ow_log("onewire_gpio_level_addr is %x; onewire_gpio_cfg_addr is %x", (uint32_t)(onewire_data->onewire_gpio_level_addr), (uint32_t)(onewire_data->onewire_gpio_cfg_addr));
 	ow_log("onewire_data->gpio_cfg66_reg is %x; onewire_data->gpio_in_out_reg is %x", (uint32_t)(onewire_data->gpio_cfg66_reg), (uint32_t)(onewire_data->gpio_in_out_reg));
-	
+
 	// create device node
 	onewire_data->dev = device_create(onewire_class,
 		pdev->dev.parent->parent, onewire_major, onewire_data, "onewirectrl");
@@ -466,7 +468,7 @@ static int onewire_gpio_probe(struct platform_device *pdev)
 		ow_err("Failed to create interface device\n");
 		goto onewire_interface_dev_create_err;
 	}
-
+	ow_log("lvchen8\n");
 	p = &onewire_data->dev->kobj;
 
 	// create attr file
@@ -475,14 +477,14 @@ static int onewire_gpio_probe(struct platform_device *pdev)
 		ow_err("Failed to create sysfs attr file\n");
 		goto onewire_sysfs_ow_gpio_err;
 	}
-
+	ow_log("lvchen9\n");
 	retval = sysfs_create_link(&onewire_data->dev->kobj, &pdev->dev.kobj,
 								"pltdev");
 	if (retval) {
 		ow_err("Failed to create sysfs link\n");
 		goto onewire_syfs_create_link_err;
 	}
-
+	ow_log("lvchen10\n");
 	return 0;
 onewire_syfs_create_link_err:
 	if (gpio_is_valid(onewire_data->ow_gpio))

@@ -58,8 +58,6 @@ struct votable {
 	struct dentry		*force_val_ent;
 	bool			force_active;
 	struct dentry		*force_active_ent;
-	struct dentry		*effective_val_ent;
-	struct dentry		*effective_client_ent;
 };
 
 /**
@@ -490,12 +488,20 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 	 */
 	if (!votable->voted_on
 			|| (effective_result != votable->effective_result)) {
+		if (strcmp(votable->name, "FG_WS") != 0) {
+			if (votable->override_result == -EINVAL) {
+				pr_info("%s: current vote is now %d voted by %s,%d, previous voted %d\n",
+						votable->name, effective_result,
+						get_client_str(votable, effective_id),
+						effective_id, votable->effective_result);
+			} else {
+				pr_info("%s: current override_result %d, %s set %d is miss\n",
+						votable->name, votable->override_result,
+						client_str, val);
+			}
+		}
 		votable->effective_client_id = effective_id;
 		votable->effective_result = effective_result;
-		pr_debug("%s: effective vote is now %d voted by %s,%d\n",
-			votable->name, effective_result,
-			get_client_str(votable, effective_id),
-			effective_id);
 		if (votable->callback && !votable->force_active
 				&& (votable->override_result == -EINVAL))
 			rc = votable->callback(votable, votable->data,
@@ -539,6 +545,11 @@ int vote_override(struct votable *votable, const char *override_client,
 		return -EINVAL;
 
 	lock_votable(votable);
+
+	pr_info("%s:client %s,enabled:%d,val:%d\n",
+			votable->name, override_client,
+			enabled, val);
+
 	if (votable->force_active) {
 		votable->override_result = enabled ? val : -EINVAL;
 		goto out;
@@ -712,36 +723,6 @@ static const struct file_operations votable_status_ops = {
 	.release	= single_release,
 };
 
-static int show_effective_client(struct seq_file *m, void *data)
-{
-	struct votable *votable = m->private;
-	const char *effective_client_str;
-
-	lock_votable(votable);
-
-	effective_client_str = get_effective_client_locked(votable);
-	seq_printf(m, "%s\n", effective_client_str ? effective_client_str : "none");
-
-	unlock_votable(votable);
-
-	return 0;
-}
-
-static int effective_client_open(struct inode *inode, struct file *file)
-{
-	struct votable *votable = inode->i_private;
-
-	return single_open(file, show_effective_client, votable);
-}
-
-static const struct file_operations effective_client_ops = {
-	.owner		= THIS_MODULE,
-	.open		= effective_client_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
-
 struct votable *create_votable(const char *name,
 				int votable_type,
 				int (*callback)(struct votable *votable,
@@ -841,29 +822,6 @@ struct votable *create_votable(const char *name,
 					&votable_force_ops);
 	if (!votable->force_active_ent) {
 		pr_err("Couldn't create force_active dbg file for %s\n", name);
-		debugfs_remove_recursive(votable->root);
-		kfree(votable->name);
-		kfree(votable);
-		return ERR_PTR(-EEXIST);
-	}
-
-	votable->effective_val_ent = debugfs_create_u32("effective_val",
-					S_IFREG | 0644,
-					votable->root,
-					&(votable->effective_result));
-	if (!votable->effective_val_ent) {
-		pr_err("Couldn't create effective_val dbg file for %s\n", name);
-		debugfs_remove_recursive(votable->root);
-		kfree(votable->name);
-		kfree(votable);
-		return ERR_PTR(-EEXIST);
-	}
-
-	votable->effective_client_ent = debugfs_create_file("effective_client", S_IFREG | 0444,
-				  votable->root, votable,
-				  &effective_client_ops);
-	if (!votable->effective_client_ent) {
-		pr_err("Couldn't create effective_client dbg file for %s\n", name);
 		debugfs_remove_recursive(votable->root);
 		kfree(votable->name);
 		kfree(votable);

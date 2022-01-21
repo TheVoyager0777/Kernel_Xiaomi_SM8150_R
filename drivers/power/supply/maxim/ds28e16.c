@@ -32,8 +32,8 @@
 #include <linux/regmap.h>
 #include <linux/random.h>
 
-#define ds_info	pr_info
-#define ds_dbg	pr_debug
+#define ds_info	pr_err
+#define ds_dbg	pr_err
 #define ds_err	pr_err
 #define ds_log	pr_err
 
@@ -88,6 +88,7 @@ unsigned char mi_page1_data[16] = {0x00};
 unsigned char mi_counter[16] = {0x00};
 int mi_auth_result = 0x00;
 
+
 unsigned char crc_low_first(unsigned char *ptr, unsigned char len)
 {
 	unsigned char i;
@@ -113,11 +114,12 @@ short Read_RomID(unsigned char *RomID)
 
 	if (flag_mi_romid == 2) {
 		memcpy(RomID, mi_romid, 8);
+		ds_log("lvchen---Read_RomID00\n");
 		return DS_TRUE;
 	}
 
 	if ((ow_reset()) != 0) {
-		ds_err("Failed to reset ds28e16!\n");
+		ds_err("Read_RomID: Failed to reset ds28e16!\n");
 		ow_reset();
 		return ERROR_NO_DEVICE;
 	}
@@ -142,6 +144,7 @@ short Read_RomID(unsigned char *RomID)
 		return DS_TRUE;
 	} else {
 		ow_reset();
+		ds_log("lvchen---Read_RomID33\n");
 		return DS_FALSE;
 	}
 }
@@ -270,8 +273,15 @@ int DS28E16_cmd_readStatus(unsigned char *data)
 	int len_byte = 1;
 	int read_len = 7;
 
+	ds_dbg("lvchen--data = %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
+	data[0], data[1], data[2], data[3],
+	data[4], data[5], data[6], data[7]);
+	ds_dbg("lvchen--mi_status = %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
+	mi_status[0], mi_status[1], mi_status[2], mi_status[3],
+	mi_status[4], mi_status[5], mi_status[6], mi_status[7]);
 	if (flag_mi_status) {
 		memcpy(data, mi_status, 8);
+		ds_log("lvchen---DS28E16_cmd_readStatus00\n");
 		return DS_TRUE;
 	}
 
@@ -300,11 +310,19 @@ int DS28E16_cmd_readStatus(unsigned char *data)
 			flag_mi_status = 1;
 			memcpy(mi_status, data, 8);
 			MANID[0] = data[4];
+			ds_dbg("lvchen--data = %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
+			data[0], data[1], data[2], data[3],
+			data[4], data[5], data[6], data[7]);
+			ds_dbg("lvchen--mi_status = %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
+			mi_status[0], mi_status[1], mi_status[2], mi_status[3],
+			mi_status[4], mi_status[5], mi_status[6], mi_status[7]);
+			ds_log("lvchen---DS28E16_cmd_readStatus11\n");
 			return DS_TRUE;
 		}
 	}
 
 	ow_reset();
+	ds_log("lvchen---DS28E16_cmd_readStatus22\n");
 	return DS_FALSE;
 }
 
@@ -331,26 +349,26 @@ int DS28E16_cmd_readMemory(int pg, unsigned char *data)
 
 	switch (pagenum)
 	{
-		case 0x00:
-			if (flag_mi_page0_data) {
-				memcpy(data, mi_page0_data, 16);
-				return DS_TRUE;
-			}
-			break;
-		case 0x01:
-			if (flag_mi_page1_data) {
-				memcpy(data, mi_page1_data, 16);
-				return DS_TRUE;
-			}
-			break;
-		case 0x02:
-			if (flag_mi_counter) {
-				memcpy(data, mi_counter, 16);
-				return DS_TRUE;
-			}
-			break;
-		default:
-			return DS_FALSE;
+	case 0x00:
+		if (flag_mi_page0_data) {
+			memcpy(data, mi_page0_data, 16);
+			return DS_TRUE;
+		}
+		break;
+	case 0x01:
+		if (flag_mi_page1_data) {
+			memcpy(data, mi_page1_data, 16);
+			return DS_TRUE;
+		}
+		break;
+	case 0x02:
+		if (flag_mi_counter) {
+			memcpy(data, mi_counter, 16);
+			return DS_TRUE;
+		}
+		break;
+	default:
+		return DS_FALSE;
 	}
 
 	last_result_byte = RESULT_FAIL_NONE;
@@ -452,7 +470,7 @@ int DS28E16_cmd_writeMemory(int pg, unsigned char *data)
 		read_buf, &read_len, write_len)) {
 		if (read_len == 1) {
 			last_result_byte = read_buf[0];
-			if (read_buf[0] == RESULT_SUCCESS){
+			if (read_buf[0] == RESULT_SUCCESS) {
 				if (pagenum == 0x00) {
 					flag_mi_page0_data = 0;
 					memset(mi_page0_data, 0x00, 16);
@@ -614,10 +632,9 @@ int DS28E16_cmd_device_disable(int op, unsigned char *password)
 /// 'Compute and Read Page Authentication' command
 ///
 /// @param[in] anon - boolean parameter
-/// @param[in] pg - Page number   2,计数器; 0,page0; 1,page1;
+/// @param[in] pg - Page number   2,计数�? 0,page0; 1,page1;
 /// @param[in] challenge
-/// @param[out] hmac   返回的计算结果32个字节
-///
+/// @param[out] hmac   返回的计算结�?2个字�?///
 /// @return
 /// DS_TRUE - command successful @n
 /// DS_FALSE - command failed
@@ -931,8 +948,7 @@ unsigned char *Challenge, unsigned char *Secret_Seeds, unsigned char *S_Secret)
 		ds_dbg("hmac is not match. result=ERROR_UNMATCH_MAC\n");
 		flag_mi_page1_data = 0;
 		return ERROR_UNMATCH_MAC;
-	}
-	else {
+	} else {
 		flag_mi_auth_result = 1;
 		ds_dbg("hmac is match. result=DS_TRUE\n");
 		mi_auth_result = DS_TRUE;
@@ -954,6 +970,7 @@ static int ds28el16_Read_RomID_retry(unsigned char *RomID)
 				return DS_TRUE;
 		}
 	}
+	ds_log("ds28el16_Read_RomID_retry fail\n");
 	return DS_FALSE;
 }
 
@@ -970,6 +987,22 @@ static int ds28el16_get_page_status_retry(unsigned char *data)
 
 	return DS_FALSE;
 }
+
+/*
+static int ds28el16_set_page_status_retry(unsigned char page, unsigned char status)
+{
+	int i;
+
+	for (i = 0; i < SET_BLOCK_STATUS_RETRY; i++) {
+		ds_info("set page status communication start... %d\n", i);
+
+		if (DS28E16_cmd_setPageProtection(page, status) == TRUE)
+			return DS_TRUE;
+	}
+
+	return DS_FALSE;
+}
+*/
 
 static int ds28el16_get_page_data_retry(int page, unsigned char *data)
 {
@@ -1098,11 +1131,13 @@ static int verify_get_property(struct power_supply *psy, enum power_supply_prope
 			return -EAGAIN;
 		break;
 	case POWER_SUPPLY_PROP_CHIP_OK:
+		ds_log("lvchen---POWER_SUPPLY_PROP_CHIP_OK\n");
 		ret = ds28el16_Read_RomID_retry(mi_romid);
 		if ((mi_romid[0] == FAMILY_CODE) && (mi_romid[6] == CUSTOM_ID_MSB) && ((mi_romid[5] & 0xf0) == CUSTOM_ID_LSB))
 			val->intval = true;
 		else
 			val->intval = false;
+		ds_log("lvchen---flag_mi_romid: %d, flag_mi_status: %d\n", flag_mi_romid, flag_mi_status);
 		break;
 	case POWER_SUPPLY_PROP_DS_STATUS:
 		ret = ds28el16_get_page_status_retry(buf);
@@ -1147,6 +1182,23 @@ static int verify_set_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_PAGENUMBER:
 		pagenumber = val->intval;
 		break;
+/*
+	case POWER_SUPPLY_PROP_PAGEDATA:
+		memcpy(buf, val->arrayval, 16);
+		ret = DS28E16_cmd_writeMemory(pagenumber, buf);
+		if (ret != DS_TRUE)
+			return -EAGAIN;
+		break;
+	case POWER_SUPPLY_PROP_SESSION_SEED:
+		memcpy(session_seed, val->arrayval, 32);
+		break;
+	case POWER_SUPPLY_PROP_S_SECRET:
+		memcpy(S_secret, val->arrayval, 32);
+		break;
+	case POWER_SUPPLY_PROP_CHALLENGE:
+		memcpy(challenge, val->arrayval, 32);
+		break;
+*/
 	case POWER_SUPPLY_PROP_AUTH_ANON:
 		auth_ANON  = val->intval;
 		break;
@@ -1286,6 +1338,11 @@ struct device_attribute *attr, char *buf)
 		RomID[4], RomID[5], RomID[6], RomID[7]);
 		Delay_us(1000);
 	}
+
+	/*ds_dbg("RomID = %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
+	RomID[0], RomID[1], RomID[2], RomID[3],
+	RomID[4], RomID[5], RomID[6], RomID[7]);
+	*/
 	ds_log("test done\nsuccess time : %d\n", count);
 	return scnprintf(buf, PAGE_SIZE,
 	"Success = %d\nRomID = %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x\n",
@@ -1712,6 +1769,7 @@ static int ds28e16_probe(struct platform_device *pdev)
 	return 0;
 
 ds28e16_create_group_err:
+//sysfs_remove_groups(&ds28e16_data->dev->kobj, &(&ds_attr_group));
 ds28e16_psy_register_err:
 dev_set_drvdata(ds28e16_data->dev, NULL);
 ds28e16_parse_dt_err:
