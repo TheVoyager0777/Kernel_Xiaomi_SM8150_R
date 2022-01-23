@@ -56,28 +56,14 @@
 		};
 
 		pm8150l_gpios: pinctrl@c000 {
-			compatible = "qcom,spmi-gpio";
-			reg = <0xc000 0xc00>;
-			interrupts = <0x4 0xc0 0 IRQ_TYPE_NONE>,
-					<0x4 0xc1 0 IRQ_TYPE_NONE>,
-					<0x4 0xc2 0 IRQ_TYPE_NONE>,
-					<0x4 0xc3 0 IRQ_TYPE_NONE>,
-					<0x4 0xc4 0 IRQ_TYPE_NONE>,
-					<0x4 0xc5 0 IRQ_TYPE_NONE>,
-					<0x4 0xc7 0 IRQ_TYPE_NONE>,
-					<0x4 0xc8 0 IRQ_TYPE_NONE>,
-					<0x4 0xc9 0 IRQ_TYPE_NONE>,
-					<0x4 0xca 0 IRQ_TYPE_NONE>,
-					<0x4 0xcb 0 IRQ_TYPE_NONE>;
-			interrupt-names = "pm8150l_gpio1", "pm8150l_gpio2",
-					"pm8150l_gpio3", "pm8150l_gpio4",
-					"pm8150l_gpio5", "pm8150l_gpio6",
-					"pm8150l_gpio8", "pm8150l_gpio9",
-					"pm8150l_gpio10", "pm8150l_gpio11",
-					"pm8150l_gpio12";
-			gpio-controller;
-			#gpio-cells = <2>;
-			qcom,gpios-disallowed = <7>;
+					compatible = "qcom,spmi-gpio";
+					reg = <0xc000 0xc00>;
+					interrupts = <0x04 0xc0 0x00 0x00 0x04 0xc1 0x00 0x00 0x04 0xc2 0x00 0x00 0x04 0xc3 0x00 0x00 0x04 0xc4 0x00 0x00 0x04 0xc5 0x00 0x00 0x04 0xc7 0x00 0x00 0x04 0xc8 0x00 0x00 0x04 0xc9 0x00 0x00 0x04 0xca 0x00 0x00 0x04 0xcb 0x00 0x00>;
+					interrupt-names = "pm8150l_gpio1\0pm8150l_gpio2\0pm8150l_gpio3\0pm8150l_gpio4\0pm8150l_gpio5\0pm8150l_gpio6\0pm8150l_gpio8\0pm8150l_gpio9\0pm8150l_gpio10\0pm8150l_gpio11\0pm8150l_gpio12";
+					gpio-controller;
+					#gpio-cells = <0x02>;
+					qcom,gpios-disallowed = <0x07>;
+					phandle = <0xf9>;
 		};
 
 		pm8150l_vadc: vadc@3100 {
@@ -124,17 +110,34 @@
 		};
 
 		pm8150l_adc_tm: adc_tm@3500 {
-			compatible = "qcom,adc-tm5";
-			reg = <0x3500 0x100>;
-			interrupts = <0x4 0x35 0x0 IRQ_TYPE_EDGE_RISING>;
-			interrupt-names = "thr-int-en";
-			#address-cells = <1>;
-			#size-cells = <0>;
-			#thermal-sensor-cells = <1>;
-			io-channels = <&pm8150l_vadc ADC_AMUX_THM1_PU2>,
-					<&pm8150l_vadc ADC_AMUX_THM2_PU2>,
-					<&pm8150l_vadc ADC_AMUX_THM3_PU2>;
-		};
+					compatible = "qcom,adc-tm5";
+					reg = <0x3500 0x100>;
+					interrupts = <0x00 0x35 0x00 0x01>;
+					interrupt-names = "thr-int-en";
+					#address-cells = <0x01>;
+					#size-cells = <0x00>;
+					#thermal-sensor-cells = <0x01>;
+					io-channels = <0x01 0x4c 0x01 0x4d 0x01 0x4e>;
+					phandle = <0xb7>;
+
+					xo_therm {
+						reg = <0x4c>;
+						qcom,ratiometric;
+						qcom,hw-settle-time = <0xc8>;
+					};
+
+					quiet_therm {
+						reg = <0x4d>;
+						qcom,ratiometric;
+						qcom,hw-settle-time = <0xc8>;
+					};
+
+					pa_therm0 {
+						reg = <0x4e>;
+						qcom,ratiometric;
+						qcom,hw-settle-time = <0xc8>;
+					};
+				};
 	};
 
 	qcom,pm8150l@5 {
@@ -233,7 +236,7 @@
 				qcom,ires-ua = <12500>;
 				qcom,hdrm-voltage-mv = <325>;
 				qcom,hdrm-vol-hi-lo-win-mv = <100>;
-				status = "disabled";
+//				status = "disabled";
 			};
 
 			pm8150l_torch0: qcom,torch_0 {
@@ -270,7 +273,7 @@
 				qcom,ires-ua = <12500>;
 				qcom,hdrm-voltage-mv = <325>;
 				qcom,hdrm-vol-hi-lo-win-mv = <100>;
-				status = "disabled";
+				//status = "disabled";
 			};
 
 			pm8150l_switch0: qcom,led_switch_0 {
@@ -292,6 +295,19 @@
 				qcom,led-name = "led:switch_2";
 				qcom,led-mask = <3>;
 				qcom,default-led-trigger = "switch2_trigger";
+			};
+
+			pm8150l_flashlight: qcom,flashlight {
+				label = "flash";
+				qcom,led-name = "flashlight";
+				qcom,max-current = <750>;
+				qcom,default-led-trigger = "flashlight_trigger";
+				qcom,id = <3>;
+				qcom,current-ma = <500>;
+				qcom,duration-ms = <1280>;
+				qcom,ires-ua = <12500>;
+				qcom,hdrm-voltage-mv = <325>;
+				qcom,hdrm-vol-hi-lo-win-mv = <100>;
 			};
 		};
 
@@ -334,7 +350,7 @@
 			qcom,num-lpg-channels = <3>;
 			qcom,lut-patterns = <0 10 20 30 40 50 60 70 80 90 100
 						90 80 70 60 50 40 30 20 10 0>;
-			lpg1 {
+			pwm_lpg1: lpg1 {
 				qcom,lpg-chan-id = <1>;
 				qcom,ramp-step-ms = <100>;
 				qcom,ramp-pause-hi-count = <2>;
@@ -345,7 +361,7 @@
 				qcom,ramp-pattern-repeat;
 			};
 
-			lpg2 {
+			pwm_lpg2: lpg2 {
 				qcom,lpg-chan-id = <2>;
 				qcom,ramp-step-ms = <100>;
 				qcom,ramp-pause-hi-count = <2>;
@@ -356,7 +372,7 @@
 				qcom,ramp-pattern-repeat;
 			};
 
-			lpg3 {
+			pwm_lpg3: lpg3 {
 				qcom,lpg-chan-id = <3>;
 				qcom,ramp-step-ms = <100>;
 				qcom,ramp-pause-hi-count = <2>;
@@ -374,24 +390,24 @@
 			reg-names = "lpg-base";
 			#pwm-cells = <2>;
 			qcom,num-lpg-channels = <2>;
+			status = "disabled";
 		};
 
 		pm8150l_rgb_led: qcom,leds@d000 {
 			compatible = "qcom,tri-led";
 			reg = <0xd000 0x100>;
-			red {
+			red_led: red {
 				label = "red";
 				pwms = <&pm8150l_lpg 0 1000000>;
 				led-sources = <0>;
-				linux,default-trigger = "timer";
 			};
-			green {
+			green_led: green {
 				label = "green";
 				pwms = <&pm8150l_lpg 1 1000000>;
 				led-sources = <1>;
 				linux,default-trigger = "timer";
 			};
-			blue {
+			blue_led: blue {
 				label = "blue";
 				pwms = <&pm8150l_lpg 2 1000000>;
 				led-sources = <2>;
