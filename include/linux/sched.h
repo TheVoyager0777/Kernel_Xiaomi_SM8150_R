@@ -1268,6 +1268,9 @@ struct task_struct {
 	int				nr_dirtied_pause;
 	/* Start of a write-and-pause period: */
 	unsigned long			dirty_paused_when;
+	int					nr_access;
+	bool				read_throttling;
+	bool				write_throttling;
 
 #ifdef CONFIG_LATENCYTOP
 	int				latency_record_count;
@@ -1279,6 +1282,7 @@ struct task_struct {
 	 */
 	u64				timer_slack_ns;
 	u64				default_timer_slack_ns;
+	unsigned int			top_app;
 
 #ifdef CONFIG_KASAN
 	unsigned int			kasan_depth;

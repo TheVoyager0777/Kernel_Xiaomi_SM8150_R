@@ -3,6 +3,7 @@
  * Inline encryption support for fscrypt
  *
  * Copyright 2019 Google LLC
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 /*

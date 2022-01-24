@@ -3,6 +3,7 @@
  * fs/f2fs/file.c
  *
  * Copyright (c) 2012 Samsung Electronics Co., Ltd.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *             http://www.samsung.com/
  */
 #include <linux/fs.h>
@@ -32,6 +33,7 @@
 #include "xattr.h"
 #include "acl.h"
 #include "gc.h"
+#include "trace.h"
 #include <trace/events/f2fs.h>
 #include <trace/events/android_fs.h>
 #include <uapi/linux/f2fs.h>
@@ -205,6 +207,8 @@ static inline enum cp_reason_type need_do_checkpoint(struct inode *inode)
 		cp_reason = CP_HARDLINK;
 	else if (is_sbi_flag_set(sbi, SBI_NEED_CP))
 		cp_reason = CP_SB_NEED_CP;
+	else if (f2fs_parent_inode_xattr_set(inode))
+		cp_reason = CP_PARENT_XATTR_SET;
 	else if (file_wrong_pino(inode))
 		cp_reason = CP_WRONG_PINO;
 	else if (!f2fs_space_for_roll_forward(sbi))
@@ -266,7 +270,8 @@ static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 	#if defined(CONFIG_UFSTW)
 		bool turbo_set = false;
 	#endif
-
+	ktime_t start_time, delta;
+	unsigned long long duration;
 	if (unlikely(f2fs_readonly(inode->i_sb) ||
 				is_sbi_flag_set(sbi, SBI_CP_DISABLED)))
 		return 0;
@@ -281,6 +286,7 @@ static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 		trace_android_fs_fsync_start(inode,
 				current->pid, path, current->comm);
 	}
+	start_time = ktime_get();
 
 	if (S_ISDIR(inode->i_mode))
 		goto go_write;
@@ -327,6 +333,7 @@ go_write:
 	up_read(&F2FS_I(inode)->i_sem);
 
 	if (cp_reason) {
+		stat_inc_cp_reason(sbi, cp_reason);
 		/* all the dirty node pages should be flushed for POR */
 		ret = f2fs_sync_fs(inode->i_sb, 1);
 
@@ -395,6 +402,17 @@ out:
 		bdev_clear_turbo_write(sbi->sb->s_bdev);
 #endif
 	trace_f2fs_sync_file_exit(inode, cp_reason, datasync, ret);
+	delta = ktime_sub(ktime_get(), start_time);
+	duration = (unsigned long long) ktime_to_ns(delta) / (1000 * 1000);
+
+	/* print slow fsync spend more than 1s */
+	if (duration > 1000)
+		pr_info("[f2fs] slow fsync: %llu ms, cp_reason: %s, "
+			"datasync = %d, ret = %d", duration,
+			f2fs_cp_reasons[cp_reason], datasync, ret);
+	trace_f2fs_sync_file_exit(inode, cp_reason, datasync, ret);
+	f2fs_trace_ios(NULL, 1);
+	stat_inc_sync_file_count(sbi);
 	trace_android_fs_fsync_end(inode, start, end - start);
 
 	return ret;
@@ -1701,7 +1719,7 @@ next_alloc:
 		if (has_not_enough_free_secs(sbi, 0,
 			GET_SEC_FROM_SEG(sbi, overprovision_segments(sbi)))) {
 			down_write(&sbi->gc_lock);
-			err = f2fs_gc(sbi, true, false, false, NULL_SEGNO);
+			err = f2fs_gc(sbi, true, false, NULL_SEGNO);
 			if (err && err != -ENODATA && err != -EAGAIN)
 				goto out_err;
 		}
@@ -2538,7 +2556,7 @@ static int f2fs_ioc_gc(struct file *filp, unsigned long arg)
 		down_write(&sbi->gc_lock);
 	}
 
-	ret = f2fs_gc(sbi, sync, true, false, NULL_SEGNO);
+	ret = f2fs_gc(sbi, sync, true, NULL_SEGNO);
 out:
 	mnt_drop_write_file(filp);
 	return ret;
@@ -2574,7 +2592,7 @@ do_more:
 		down_write(&sbi->gc_lock);
 	}
 
-	ret = f2fs_gc(sbi, range->sync, true, false,
+	ret = f2fs_gc(sbi, range->sync, true,
 				GET_SEGNO(sbi, range->start));
 	if (ret) {
 		if (ret == -EBUSY)
@@ -3028,7 +3046,7 @@ static int f2fs_ioc_flush_device(struct file *filp, unsigned long arg)
 		sm->last_victim[GC_CB] = end_segno + 1;
 		sm->last_victim[GC_GREEDY] = end_segno + 1;
 		sm->last_victim[ALLOC_NEXT] = end_segno + 1;
-		ret = f2fs_gc(sbi, true, true, true, start_segno);
+		ret = f2fs_gc(sbi, true, true, start_segno);
 		if (ret == -EAGAIN)
 			ret = 0;
 		else if (ret < 0)

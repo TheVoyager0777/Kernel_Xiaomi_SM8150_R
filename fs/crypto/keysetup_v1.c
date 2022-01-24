@@ -3,6 +3,7 @@
  * Key setup for v1 encryption policies
  *
  * Copyright 2015, 2019 Google LLC
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 /*
