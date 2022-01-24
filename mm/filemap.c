@@ -50,6 +50,9 @@
 
 #include <asm/mman.h>
 
+#ifdef CONFIG_BLK_CGROUP
+extern void mi_throttle(struct kiocb *iocb, struct iov_iter *iodata);
+#endif
 int want_old_faultaround_pte = 1;
 
 /*
@@ -2311,7 +2314,9 @@ generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 		    IS_DAX(inode))
 			goto out;
 	}
-
+	#ifdef CONFIG_BLK_CGROUP
+	mi_throttle(iocb, iter);
+	#endif
 	retval = generic_file_buffered_read(iocb, iter, retval);
 out:
 	return retval;
@@ -3278,6 +3283,9 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 			 */
 		}
 	} else {
+		#ifdef CONFIG_BLK_CGROUP
+		mi_throttle(iocb, from);
+		#endif
 		written = generic_perform_write(file, from, iocb->ki_pos);
 		if (likely(written > 0))
 			iocb->ki_pos += written;
