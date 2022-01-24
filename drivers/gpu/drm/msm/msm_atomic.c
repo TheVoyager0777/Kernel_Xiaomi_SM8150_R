@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2014 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -19,14 +18,12 @@
 
 #include <linux/msm_drm_notify.h>
 #include <linux/notifier.h>
-#include <linux/pm_qos.h>
 
 #include "msm_drv.h"
 #include "msm_kms.h"
 #include "msm_gem.h"
 #include "msm_fence.h"
 #include "sde_trace.h"
-#include "xiaomi_frame_stat.h"
 
 #define MULTIPLE_CONN_DETECTED(x) (x > 1)
 
@@ -36,10 +33,7 @@ struct msm_commit {
 	uint32_t crtc_mask;
 	uint32_t plane_mask;
 	bool nonblock;
-	union {
-		struct kthread_work commit_work;
-		struct work_struct clean_work;
-	};
+	struct kthread_work commit_work;
 };
 
 static BLOCKING_NOTIFIER_HEAD(msm_drm_notifier_list);
@@ -79,12 +73,11 @@ EXPORT_SYMBOL(msm_drm_unregister_client);
  * @v: notifier data, inculde display id and display blank
  *     event(unblank or power down).
  */
-int msm_drm_notifier_call_chain(unsigned long val, void *v)
+static int msm_drm_notifier_call_chain(unsigned long val, void *v)
 {
 	return blocking_notifier_call_chain(&msm_drm_notifier_list, val,
 					    v);
 }
-EXPORT_SYMBOL(msm_drm_notifier_call_chain);
 
 /* block until specified crtcs are no longer pending update, and
  * atomically mark them as pending update
@@ -123,6 +116,7 @@ static void end_atomic(struct msm_drm_private *priv, uint32_t crtc_mask,
 
 static void commit_destroy(struct msm_commit *c)
 {
+	end_atomic(c->dev->dev_private, c->crtc_mask, c->plane_mask);
 	if (c->nonblock)
 		kfree(c);
 }
@@ -570,16 +564,6 @@ static void msm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 	SDE_ATRACE_END("msm_enable");
 }
 
-static void complete_commit_cleanup(struct work_struct *work)
-{
-	struct msm_commit *c = container_of(work, typeof(*c), clean_work);
-	struct drm_atomic_state *state = c->state;
-
-	drm_atomic_state_put(state);
-
-	commit_destroy(c);
-}
-
 /* The (potentially) asynchronous part of the commit.  At this point
  * nothing can fail short of armageddon.
  */
@@ -619,43 +603,25 @@ static void complete_commit(struct msm_commit *c)
 
 	kms->funcs->complete_commit(kms, state);
 
-	end_atomic(priv, c->crtc_mask, c->plane_mask);
+	drm_atomic_state_put(state);
+
+	commit_destroy(c);
 }
 
 static void _msm_drm_commit_work_cb(struct kthread_work *work)
 {
-	struct msm_commit *c = container_of(work, typeof(*c), commit_work);
-	struct pm_qos_request req = {
-		.type = PM_QOS_REQ_AFFINE_CORES,
-		.cpus_affine = ATOMIC_INIT(BIT(raw_smp_processor_id()))
-	};
-	ktime_t start, end;
-	s64 duration;
+	struct msm_commit *commit =  NULL;
 
-	start = ktime_get();
-	frame_stat_collector(0, COMMIT_START_TS);
-
-	/*
-	 * Optimistically assume the current task won't migrate to another CPU
-	 * and restrict the current CPU to shallow idle states so that it won't
-	 * take too long to resume after waiting for the prior commit to finish.
-	 */
-	pm_qos_add_request(&req, PM_QOS_CPU_DMA_LATENCY, 100);
-	SDE_ATRACE_BEGIN("complete_commit");
-	complete_commit(c);
-	SDE_ATRACE_END("complete_commit");
-	pm_qos_remove_request(&req);
-
-	if (c->nonblock) {
-		/* Offload the cleanup onto little CPUs (an unbound wq) */
-		INIT_WORK(&c->clean_work, complete_commit_cleanup);
-		queue_work(system_unbound_wq, &c->clean_work);
-	} else {
-		complete_commit_cleanup(&c->clean_work);
+	if (!work) {
+		DRM_ERROR("%s: Invalid commit work data!\n", __func__);
+		return;
 	}
-	end = ktime_get();
-	duration = ktime_to_ns(ktime_sub(end, start));
-	frame_stat_collector(duration, COMMIT_END_TS);
+
+	commit = container_of(work, struct msm_commit, commit_work);
+
+	SDE_ATRACE_BEGIN("complete_commit");
+	complete_commit(commit);
+	SDE_ATRACE_END("complete_commit");
 }
 
 static struct msm_commit *commit_init(struct drm_atomic_state *state,
@@ -726,7 +692,6 @@ static void msm_atomic_commit_dispatch(struct drm_device *dev,
 		 */
 		DRM_ERROR("failed to dispatch commit to any CRTC\n");
 		complete_commit(commit);
-		complete_commit_cleanup(&commit->clean_work);
 	} else if (!nonblock) {
 		kthread_flush_work(&commit->commit_work);
 	}

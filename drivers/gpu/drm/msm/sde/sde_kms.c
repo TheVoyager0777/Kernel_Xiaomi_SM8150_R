@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -81,8 +80,6 @@ static const char * const iommu_ports[] = {
 
 #define SDE_KMS_MODESET_LOCK_TIMEOUT_US 500
 #define SDE_KMS_MODESET_LOCK_MAX_TRIALS 20
-
-#define SDE_KMS_PM_QOS_CPU_DMA_LATENCY 300
 
 /**
  * sdecustom - enable certain driver customizations for sde clients
@@ -1054,11 +1051,7 @@ static void sde_kms_commit(struct msm_kms *kms,
 			sde_crtc_commit_kickoff(crtc, old_crtc_state);
 		}
 	}
-/*
-	for_each_crtc_in_state(old_state, crtc, old_crtc_state, i) {
-		sde_crtc_fod_ui_ready(crtc, old_crtc_state);
-	}
-*/
+
 	SDE_ATRACE_END("sde_kms_commit");
 }
 
@@ -1145,9 +1138,7 @@ static void sde_kms_complete_commit(struct msm_kms *kms,
 	SDE_ATRACE_BEGIN("sde_kms_complete_commit");
 
 	for_each_crtc_in_state(old_state, crtc, old_crtc_state, i) {
-		SDE_ATRACE_BEGIN("sde_crtc_complete_commit");
 		sde_crtc_complete_commit(crtc, old_crtc_state);
-		SDE_ATRACE_END("sde_crtc_complete_commit");
 
 		/* complete secure transitions if any */
 		if (sde_kms->smmu_state.transition_type == POST_COMMIT)
@@ -1171,14 +1162,11 @@ static void sde_kms_complete_commit(struct msm_kms *kms,
 			SDE_EVT32(connector->base.id, c_conn->qsync_mode);
 		}
 
-		SDE_ATRACE_BEGIN("post_kickoff");
 		rc = c_conn->ops.post_kickoff(connector, &params);
-		SDE_ATRACE_END("post_kickoff");
 		if (rc) {
 			pr_err("Connector Post kickoff failed rc=%d\n",
 					 rc);
 		}
-		sde_connector_fod_notify(connector);
 	}
 
 	sde_power_resource_enable(&priv->phandle, sde_kms->core_client, false);
@@ -1232,7 +1220,6 @@ static void sde_kms_wait_for_commit_done(struct msm_kms *kms,
 		ret = sde_encoder_wait_for_event(encoder, MSM_ENC_COMMIT_DONE);
 		if (ret && ret != -EWOULDBLOCK) {
 			SDE_ERROR("wait for commit done returned %d\n", ret);
-			sde_crtc_request_frame_reset(crtc);
 			break;
 		}
 
@@ -3202,40 +3189,6 @@ static void _sde_kms_set_lutdma_vbif_remap(struct sde_kms *sde_kms)
 	sde_vbif_set_qos_remap(sde_kms, &qos_params);
 }
 
-void sde_kms_update_pm_qos_irq_request(struct sde_kms *sde_kms,
-			 bool enable, bool skip_lock)
-{
-	struct msm_drm_private *priv;
-
-	if (!sde_kms->irq_num)
-		return;
-
-	priv = sde_kms->dev->dev_private;
-
-	if (!skip_lock)
-		mutex_lock(&priv->phandle.phandle_lock);
-
-	if (enable) {
-		u32 cpu_irq_latency = sde_kms->catalog->perf.cpu_irq_latency;
-		struct pm_qos_request *req = &sde_kms->pm_qos_irq_req;
-
-		if (pm_qos_request_active(req)) {
-			pm_qos_update_request(req, cpu_irq_latency);
-		} else {
-			req->type = PM_QOS_REQ_AFFINE_IRQ;
-			req->irq = sde_kms->irq_num;
-			pm_qos_add_request(req, PM_QOS_CPU_DMA_LATENCY,
-					   cpu_irq_latency);
-		}
-	} else if (!enable && pm_qos_request_active(&sde_kms->pm_qos_irq_req)) {
-		pm_qos_update_request(&sde_kms->pm_qos_irq_req,
-				PM_QOS_DEFAULT_VALUE);
-	}
-
-	if (!skip_lock)
-		mutex_unlock(&priv->phandle.phandle_lock);
-}
-
 static void sde_kms_handle_power_event(u32 event_type, void *usr)
 {
 	struct sde_kms *sde_kms = usr;
@@ -3254,9 +3207,7 @@ static void sde_kms_handle_power_event(u32 event_type, void *usr)
 		sde_kms_init_shared_hw(sde_kms);
 		_sde_kms_set_lutdma_vbif_remap(sde_kms);
 		sde_kms->first_kickoff = true;
-		sde_kms_update_pm_qos_irq_request(sde_kms, true, true);
 	} else if (event_type == SDE_POWER_EVENT_PRE_DISABLE) {
-		sde_kms_update_pm_qos_irq_request(sde_kms, false, true);
 		sde_irq_update(msm_kms, false);
 		sde_kms->first_kickoff = false;
 	}
@@ -3711,7 +3662,6 @@ static int sde_kms_hw_init(struct msm_kms *kms)
 		sde_power_resource_enable(&priv->phandle,
 						sde_kms->core_client, false);
 	}
-
 	return 0;
 
 genpd_err:
