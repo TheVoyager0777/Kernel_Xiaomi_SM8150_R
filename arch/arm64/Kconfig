@@ -1589,6 +1589,14 @@ endif
 
 source "lib/Kconfig"
 
+config HWCONF_MANAGER
+       bool "Hardware configuration and monitor information"
+       default y
+       depends on CJSON
+       help
+        It provides all kinds of components configuration information and
+        monitor values.
+        
 menu "Xiaomi configuration options"
 
 config MACH_XIAOMI
