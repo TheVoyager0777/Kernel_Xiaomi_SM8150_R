@@ -3039,11 +3039,6 @@ static inline enum sched_boost_policy sched_boost_policy(void)
 }
 
 extern unsigned int sched_boost_type;
-static inline int sched_boost(void)
-{
-	return sched_boost_type;
-}
-
 
 static inline bool task_placement_boost_enabled(struct task_struct *p)
 {

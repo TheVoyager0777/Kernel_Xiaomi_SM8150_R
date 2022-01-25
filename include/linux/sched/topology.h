@@ -5,6 +5,7 @@
 #include <linux/topology.h>
 
 #include <linux/sched/idle.h>
+#include <linux/sched/sched.h>
 
 /*
  * sched-domains (multiprocessor balancing) declarations:
