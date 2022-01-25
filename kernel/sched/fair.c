@@ -7501,15 +7501,12 @@ static int start_cpu(struct task_struct *p, bool boosted,
 		int rtg_target_cpu = cpumask_first_and(rtg_target,
 						cpu_online_mask);
 
-	if (game_vip_task(p)) {
-		return rd->max_cap_orig_cpu;
-	}
-
-	if (boosted && (task_util(p) >= stune_task_threshold))
-		return boosted ? rd->max_cap_orig_cpu : rd->min_cap_orig_cpu;
-		
 		if (rtg_target_cpu < nr_cpu_ids)
 			return rtg_target_cpu;
+	}
+
+	if (game_vip_task(p)) {
+		return rd->max_cap_orig_cpu;
 	}
 
 	/* Where the task should land based on its demand */
@@ -7895,31 +7892,19 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			/* Favor CPUs with maximum spare capacity */
 			if (spare_cap < target_max_spare_cap)
 				continue;
+
 			target_max_spare_cap = spare_cap;
 			target_capacity = capacity_orig;
 			target_util = new_util;
 			target_cpu = i;
 		}
 
-			if (game_vip_task(p) &&
-				(best_idle_cpu != -1 || target_cpu != -1 || best_active_cpu != -1))
-				break;
-			/*
-			 * If little core will use frequency
-			 * higher than truning point, store it
-			 * as backup cpu.
-			 */
-			if (turning &&
-				new_util < backup_active_min_cpu_util) {
-				backup_active_min_cpu_util =
-				new_util;
-				backup_active_min_cpu = i;
-				continue;
-			}
-
 		next_group_higher_cap = (capacity_orig_of(group_first_cpu(sg)) <
 			capacity_orig_of(group_first_cpu(sg->next)));
 
+                         if (game_vip_task(p) &&
+				(best_idle_cpu != -1 || target_cpu != -1 || best_active_cpu != -1))
+				break;
 		/*
 		 * If we've found a cpu, but the boost is ON_ALL we continue
 		 * visiting other clusters. If the boost is ON_BIG we visit
@@ -8360,34 +8345,7 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 		/* Immediately return a found idle CPU for a prefer_idle task */
 		if ((prefer_idle || game_vip_task(p)) && target_cpu >= 0 && idle_cpu(target_cpu) &&
 			!cpu_isolated(target_cpu))
-			return target_cpu;
-
-		task_clamped_util = uclamp_task_effective_util(p, UCLAMP_MIN);
-		if (task_clamped_util > capacity_of(prev_cpu))
-			return target_cpu;
-
-		/* sched: no need energy calculation if the same domain */
-		if (target_cpu >= 0 &&
-			is_intra_domain(task_cpu(p), target_cpu) &&
-			target_cpu != l_plus_cpu && !cpu_isolated(target_cpu)) {
-
-			if (idle_cpu(prev_cpu) && idle_cpu(target_cpu)) {
-				struct rq *prev_rq, *target_rq;
-				int prev_idle_idx;
-				int target_idle_idx;
-
-				prev_rq = cpu_rq(prev_cpu);
-				target_rq = cpu_rq(target_cpu);
-
-				prev_idle_idx = idle_get_state_idx(prev_rq);
-				target_idle_idx = idle_get_state_idx(target_rq);
-
-				/* favoring shallowest idle states */
-				if ((prev_idle_idx <= target_idle_idx) ||
-					target_idle_idx == -1)
-					target_cpu = prev_cpu;
-			}
-			return target_cpu;
+			goto out;
 
 #ifdef CONFIG_SCHED_WALT
 		if (!walt_disabled && sysctl_sched_use_walt_cpu_util &&

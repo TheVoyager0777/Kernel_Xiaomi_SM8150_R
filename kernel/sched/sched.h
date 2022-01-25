@@ -3144,7 +3144,6 @@ static inline unsigned long thermal_cap(int cpu)
 }
 #endif
 
-<<<<<<< HEAD
 static inline void clear_walt_request(int cpu) { }
 
 static inline int is_reserved(int cpu)
@@ -3180,7 +3179,8 @@ static inline void sched_irq_work_queue(struct irq_work *work)
 		irq_work_queue(work);
 	else
 		irq_work_queue_on(work, cpumask_any(cpu_online_mask));
-
+}
+#endif
 
 #ifdef CONFIG_MIGT
 void __weak migt_monitot_init(struct task_struct *tsk)
@@ -3188,4 +3188,3 @@ void __weak migt_monitot_init(struct task_struct *tsk)
 	return;
 }
 #endif
-
