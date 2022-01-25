@@ -44,6 +44,7 @@ static DEFINE_IDR(zram_index_idr);
 static DEFINE_MUTEX(zram_index_mutex);
 
 static int zram_major;
+static struct zram *zram_devices;
 static char *default_compressor = CONFIG_ZRAM_DEF_COMP;
 
 module_param(default_compressor, charp, 0644);
@@ -90,6 +91,16 @@ static inline bool init_done(struct zram *zram)
 static inline struct zram *dev_to_zram(struct device *dev)
 {
 	return (struct zram *)dev_to_disk(dev)->private_data;
+}
+
+static unsigned long zram_get_handle(struct zram *zram, u32 index)
+{
+	return zram->table[index].handle;
+}
+
+static void zram_set_handle(struct zram *zram, u32 index, unsigned long handle)
+{
+	zram->table[index].handle = handle;
 }
 
 static struct zram_entry *zram_get_entry(struct zram *zram, u32 index)
@@ -354,34 +365,37 @@ static ssize_t idle_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct zram *zram = dev_to_zram(dev);
-	ktime_t cutoff_time = 0;
-	ssize_t rv = -EINVAL;
+	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
+	int index, mark_nr = 0;
 
-	if (!sysfs_streq(buf, "all")) {
-		/*
-		 * If it did not parse as 'all' try to treat it as an integer when
-		 * we have memory tracking enabled.
-		 */
-		u64 age_sec;
-
-		if (IS_ENABLED(CONFIG_ZRAM_MEMORY_TRACKING) && !kstrtoull(buf, 0, &age_sec))
-			cutoff_time = ktime_sub(ktime_get_boottime(),
-					ns_to_ktime(age_sec * NSEC_PER_SEC));
-		else
-			goto out;
-	}
+	if (!sysfs_streq(buf, "all"))
+		return -EINVAL;
 
 	down_read(&zram->init_lock);
-	if (!init_done(zram))
-		goto out_unlock;
+	if (!init_done(zram)) {
+		up_read(&zram->init_lock);
+		return -EINVAL;
+	}
 
-	/* A cutoff_time of 0 marks everything as idle, this is the "all" behavior */
-	mark_idle(zram, cutoff_time);
-	rv = len;
+	for (index = 0; index < nr_pages; index++) {
+		/*
+		 * Do not mark ZRAM_UNDER_WB slot as ZRAM_IDLE to close race.
+		 * See the comment in writeback_store.
+		 */
+		zram_slot_lock(zram, index);
+		if (zram_allocated(zram, index) &&
+				!zram_test_flag(zram, index, ZRAM_UNDER_WB)) {
+			zram_inc_idle_count(zram, index);
+			if (!zram_test_flag(zram, index, ZRAM_IDLE)) {
+				zram_set_flag(zram, index, ZRAM_IDLE);
+				mark_nr++;
+			}
+		}
+		zram_slot_unlock(zram, index);
+	}
 
-out_unlock:
 	up_read(&zram->init_lock);
-out:
+
 	pr_info("Mark IDLE finished. Mark %d pages\n", mark_nr);
 	return len;
 }
@@ -1839,7 +1853,7 @@ static bool zram_meta_alloc(struct zram *zram, u64 disksize)
  */
 static void zram_free_page(struct zram *zram, size_t index)
 {
-	struct zram_entry *entry;
+	unsigned long handle;
 
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	zram->table[index].ac_time = 0;
@@ -1870,17 +1884,16 @@ static void zram_free_page(struct zram *zram, size_t index)
 		goto out;
 	}
 
-	entry = zram_get_entry(zram, index);
-	if (!entry)
+	handle = zram_get_handle(zram, index);
+	if (!handle)
 		return;
 
-	zram_entry_free(zram, entry);
+	zs_free(zram->mem_pool, handle);
 
 	atomic64_sub(zram_get_obj_size(zram, index),
 			&zram->stats.compr_data_size);
 out:
 	atomic64_dec(&zram->stats.pages_stored);
-	zram_set_entry(zram, index, NULL);
 #ifdef CONFIG_MIUI_ZRAM_MEMORY_TRACKING
 	average_size(zram, atomic64_read(&zram->stats.pages_stored));
 #endif
@@ -1893,11 +1906,10 @@ out:
 static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 				struct bio *bio, bool partial_io)
 {
-        struct zcomp_strm *zstrm;
-	struct zram_entry *entry;
+	int ret;
+	unsigned long handle;
 	unsigned int size;
 	void *src, *dst;
-	int ret;
 
 	zram_slot_lock(zram, index);
 	if (zram_test_flag(zram, index, ZRAM_WB)) {
@@ -1913,12 +1925,12 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 				bio, partial_io);
 	}
 
-	entry = zram_get_entry(zram, index);
-	if (!entry || zram_test_flag(zram, index, ZRAM_SAME)) {
+	handle = zram_get_handle(zram, index);
+	if (!handle || zram_test_flag(zram, index, ZRAM_SAME)) {
 		unsigned long value;
 		void *mem;
 
-		value = entry ? zram_get_element(zram, index) : 0;
+		value = handle ? zram_get_element(zram, index) : 0;
 		mem = kmap_atomic(page);
 		zram_fill_page(mem, PAGE_SIZE, value);
 		kunmap_atomic(mem);
@@ -1928,27 +1940,25 @@ static int __zram_bvec_read(struct zram *zram, struct page *page, u32 index,
 
 	size = zram_get_obj_size(zram, index);
 
-	if (size != PAGE_SIZE)
-		zstrm = zcomp_stream_get(zram->comp);
-
-	src = zs_map_object(zram->mem_pool,
-			    zram_entry_handle(zram, entry), ZS_MM_RO);
+	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
 	if (size == PAGE_SIZE) {
 		dst = kmap_atomic(page);
 		memcpy(dst, src, PAGE_SIZE);
 		kunmap_atomic(dst);
 		ret = 0;
 	} else {
+		struct zcomp_strm *zstrm = zcomp_stream_get(zram->comp);
+
 		dst = kmap_atomic(page);
 		ret = zcomp_decompress(zstrm, src, size, dst);
 		kunmap_atomic(dst);
 		zcomp_stream_put(zram->comp);
 	}
-	zs_unmap_object(zram->mem_pool, zram_entry_handle(zram, entry));
+	zs_unmap_object(zram->mem_pool, handle);
 	zram_slot_unlock(zram, index);
 
 	/* Should NEVER happen. Return bio error if it does. */
-	if (WARN_ON(ret))
+	if (unlikely(ret))
 		pr_err("Decompression failed! err=%d, page=%u\n", ret, index);
 
 	return ret;
