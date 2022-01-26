@@ -11,12 +11,12 @@ enum {
 #define KMALLOC_POOL_ORDER2 2
 static inline bool rtmm_pool(const char *name)
 {
-	return true;
+	return false;
 }
 
 static inline bool rtmm_reclaim(const char *name)
 {
-	return true;
+	return false;
 }
 
 static inline int rtmm_reclaim_swappiness(void)

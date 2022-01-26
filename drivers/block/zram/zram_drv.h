@@ -80,7 +80,6 @@ struct zram_entry {
 struct zram_table_entry {
 	union {
 		struct zram_entry *entry;
-		unsigned long handle;
 		unsigned long element;
 	};
 	unsigned long flags;
