@@ -97,32 +97,6 @@ static void zram_set_entry(struct zram *zram, u32 index,
 	zram->table[index].entry = entry;
 }
 
-static inline unsigned long zram_get_idle_count(struct zram *zram, u32 index)
-{
-	return zram->table[index].flags >> ZRAM_WB_IDLE_SHIFT;
-}
-
-static inline void zram_clear_idle_count(struct zram *zram, u32 index)
-{
-	zram->table[index].flags &= (BIT(ZRAM_WB_IDLE_SHIFT) - 1);
-}
-
-static inline void zram_set_idle_count(struct zram *zram, u32 index,
-		unsigned long idle_count)
-{
-	zram_clear_idle_count(zram, index);
-
-	zram->table[index].flags |= (idle_count << ZRAM_WB_IDLE_SHIFT);
-}
-
-static inline void zram_inc_idle_count(struct zram *zram, u32 index)
-{
-	unsigned long idle_count = zram_get_idle_count(zram, index);
-
-	if (idle_count < ZRAM_WB_IDLE_MAX)
-		zram_set_idle_count(zram, index, idle_count + 1);
-}
-
 /* flag operations require table entry bit_spin_lock() being held */
 static bool zram_test_flag(struct zram *zram, u32 index,
 			enum zram_pageflags flag)
@@ -334,11 +308,9 @@ static void mark_idle(struct zram *zram, ktime_t cutoff)
 		zram_slot_lock(zram, index);
 		if (zram_allocated(zram, index) &&
 				!zram_test_flag(zram, index, ZRAM_UNDER_WB)) {
-			zram_inc_idle_count(zram, index);
-			if (!zram_test_flag(zram, index, ZRAM_IDLE)) {
-				zram_set_flag(zram, index, ZRAM_IDLE);
+			if (!zram_test_flag(zram, index, ZRAM_IDLE))
 				mark_nr++;
-			}
+			zram_set_flag(zram, index, ZRAM_IDLE);
 		}
 		zram_slot_unlock(zram, index);
 	}
@@ -400,7 +372,6 @@ static ssize_t new_store(struct device *dev,
 	for (index = 0; index < nr_pages; index++) {
 		zram_slot_lock(zram, index);
 		zram_clear_flag(zram, index, ZRAM_IDLE);
-		zram_clear_idle_count(zram, index);
 		zram_slot_unlock(zram, index);
 	}
 
@@ -691,45 +662,16 @@ static int read_from_bdev_async(struct zram *zram, struct bio_vec *bvec,
 #define IDLE_WRITEBACK 2
 
 /* Returns true on success, false on parsing error. */
-static bool writeback_parse_input(const char *buf,
-			unsigned long *wb_max, unsigned int *wb_idle_min)
+static inline bool writeback_parse_input(const char *buf, unsigned long *wb_max)
 {
-	char *argbuf, *args, *arg;
-	bool ret = false;
+	const char *str_prefix = "idle ";
+	int str_len = strlen(str_prefix);
 
-	args = argbuf = kstrndup(buf, 32, GFP_KERNEL);
-	if (!args)
+	if (strncmp(buf, str_prefix, str_len) ||
+	    kstrtoul(buf + str_len, 10, wb_max))
 		return false;
 
-	arg = strsep(&args, " ");
-	if (!sysfs_streq(arg, "idle"))
-		goto err;
-
-	/* get @wb_max */
-	arg = strsep(&args, " ");
-	if (arg) {
-		if (kstrtoul(arg, 10, wb_max))
-			goto err;
-
-		/* get @wb_idle_min */
-		arg = strsep(&args, " ");
-		if (arg) {
-			if (kstrtouint(arg, 10, wb_idle_min))
-				goto err;
-
-			if (strsep(&args, " "))
-				goto err;
-
-			if (*wb_idle_min > ZRAM_WB_IDLE_MAX)
-				*wb_idle_min = ZRAM_WB_IDLE_MAX;
-		}
-	}
-
-	ret = true;
-	pr_info("Parse succeed. wb_max: %lu, wb_idle_min: %u\n", *wb_max, *wb_idle_min);
-err:
-	kfree(argbuf);
-	return ret;
+	return true;
 }
 
 static ssize_t writeback_store(struct device *dev,
@@ -738,7 +680,6 @@ static ssize_t writeback_store(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
 	unsigned long index, wb_max = ULONG_MAX;
-	unsigned int wb_idle_min = ZRAM_WB_IDLE_DEFAULT;
 	struct bio bio;
 	struct bio_vec bio_vec;
 	struct page *page;
@@ -748,7 +689,7 @@ static ssize_t writeback_store(struct device *dev,
 	int err;	
 	unsigned long blk_idx = 0, wb_pages_nr = 0;
 
-	if (writeback_parse_input(buf, &wb_max, &wb_idle_min))
+	if (writeback_parse_input(buf, &wb_max))
 		mode = IDLE_WRITEBACK;
 	else if (sysfs_streq(buf, "idle"))
 		mode = IDLE_WRITEBACK;
@@ -833,8 +774,7 @@ static ssize_t writeback_store(struct device *dev,
 			goto next;
 
 		if (mode == IDLE_WRITEBACK &&
-			  (!zram_test_flag(zram, index, ZRAM_IDLE) ||
-			   zram_get_idle_count(zram, index) < wb_idle_min))
+			  !zram_test_flag(zram, index, ZRAM_IDLE))
 			goto next;
 		if (mode == HUGE_WRITEBACK &&
 			  !zram_test_flag(zram, index, ZRAM_HUGE))
@@ -851,7 +791,6 @@ static ssize_t writeback_store(struct device *dev,
 			zram_slot_lock(zram, index);
 			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
 			zram_clear_flag(zram, index, ZRAM_IDLE);
-			zram_clear_idle_count(zram, index);
 			zram_slot_unlock(zram, index);
 			continue;
 		}
@@ -872,7 +811,6 @@ static ssize_t writeback_store(struct device *dev,
 			zram_slot_lock(zram, index);
 			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
 			zram_clear_flag(zram, index, ZRAM_IDLE);
-			zram_clear_idle_count(zram, index);
 			zram_slot_unlock(zram, index);
 			/*
 			 * Return last IO error unless every IO were
@@ -897,7 +835,6 @@ static ssize_t writeback_store(struct device *dev,
 			  !zram_test_flag(zram, index, ZRAM_IDLE)) {
 			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
 			zram_clear_flag(zram, index, ZRAM_IDLE);
-			zram_clear_idle_count(zram, index);
 			goto next;
 		}
 
@@ -1014,7 +951,6 @@ static void zram_debugfs_destroy(void)
 static void zram_accessed(struct zram *zram, u32 index)
 {
 	zram_clear_flag(zram, index, ZRAM_IDLE);
-	zram_clear_idle_count(zram, index);
 	zram->table[index].ac_time = ktime_get_boottime();
 }
 
@@ -1101,7 +1037,6 @@ static void zram_debugfs_destroy(void) {};
 static void zram_accessed(struct zram *zram, u32 index)
 {
 	zram_clear_flag(zram, index, ZRAM_IDLE);
-	zram_clear_idle_count(zram, index);
 };
 static void zram_debugfs_register(struct zram *zram) {};
 static void zram_debugfs_unregister(struct zram *zram) {};
@@ -1281,12 +1216,8 @@ static ssize_t get_idle_or_new_pages(struct zram *zram,
 					char *buf, const bool idle)
 {
 	unsigned long index, nr_pages = zram->disksize >> PAGE_SHIFT;
-	unsigned long pages_nr[ZRAM_WB_IDLE_MAX + 1] = { 0 };
-	unsigned int max_idle_count = idle ? ZRAM_WB_IDLE_MAX : 0;
-	unsigned int min_idle_count = idle ? 1 : 0;
-	unsigned int idle_count, i;
+	unsigned long pages_nr = 0;
 	ssize_t ret = -EINVAL;
-	size_t off = 0;
 
 	down_read(&zram->init_lock);
 
@@ -1298,18 +1229,14 @@ static ssize_t get_idle_or_new_pages(struct zram *zram,
 
 		if (zram_get_obj_size(zram, index) ||
 				zram_test_flag(zram, index, ZRAM_SAME)) {
-			idle_count = zram_get_idle_count(zram, index);
-			if (idle_count <= max_idle_count)
-				pages_nr[idle_count]++;
+			if (idle == zram_test_flag(zram, index, ZRAM_IDLE))
+				pages_nr++;
 		}
 
 		zram_slot_unlock(zram, index);
 	}
 
-	for (i = min_idle_count; i <= max_idle_count; i++)
-		off += scnprintf(buf + off, PAGE_SIZE - off, "%lu ", pages_nr[i]);
-	buf[off - 1] = '\n';
-	ret = off;
+	ret = scnprintf(buf, PAGE_SIZE, "%lu\n", pages_nr);
 
 out:
 	up_read(&zram->init_lock);
@@ -1478,10 +1405,8 @@ static void zram_free_page(struct zram *zram, size_t index)
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	zram->table[index].ac_time = 0;
 #endif
-	if (zram_test_flag(zram, index, ZRAM_IDLE)) {
+	if (zram_test_flag(zram, index, ZRAM_IDLE))
 		zram_clear_flag(zram, index, ZRAM_IDLE);
-		zram_clear_idle_count(zram, index);
-	}
 
 	if (zram_test_flag(zram, index, ZRAM_HUGE)) {
 		zram_clear_flag(zram, index, ZRAM_HUGE);
@@ -2451,8 +2376,6 @@ static int __init zram_init(void)
 				      zcomp_cpu_up_prepare, zcomp_cpu_dead);
 	if (ret < 0)
 		return ret;
-
-	BUILD_BUG_ON(ZRAM_WB_IDLE_SHIFT + ZRAM_WB_IDLE_BITS_LEN > BITS_PER_LONG);
 
 	ret = class_register(&zram_control_class);
 	if (ret) {
