@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -236,6 +237,7 @@ static void _sde_core_perf_calc_crtc(struct sde_kms *kms,
 		GET_L32(perf->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_LLCC]),
 		GET_H32(perf->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_EBI]),
 		GET_L32(perf->max_per_pipe_ib[SDE_POWER_HANDLE_DBUS_ID_EBI]));
+		
 	trace_sde_perf_calc_crtc(crtc->base.id,
 			perf->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_MNOC],
 			perf->bw_ctl[SDE_POWER_HANDLE_DBUS_ID_LLCC],
