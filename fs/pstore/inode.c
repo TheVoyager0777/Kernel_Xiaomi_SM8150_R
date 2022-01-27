@@ -524,10 +524,6 @@ static int __init init_pstore_fs(void)
 	struct proc_dir_entry *last_kmsg_entry = NULL;
 #endif
 
-#ifdef CONFIG_PSTORE_LAST_KMSG
-	struct proc_dir_entry *last_kmsg_entry = NULL;
-#endif
-
 	/* Create a convenient mount point for people to access pstore */
 	err = sysfs_create_mount_point(fs_kobj, "pstore");
 	if (err)
