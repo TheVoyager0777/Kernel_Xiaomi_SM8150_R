@@ -9,106 +9,115 @@ And public attribution of xiaomi platforms(like F1X and so and)
 #include "crux-sm8150-camera-sensor-mtp.dtsi"
 
 &soc {
-	touch_vddio_vreg: touch_vddio_vreg {
-		compatible = "regulator-fixed";
-		regulator-name = "disp_vddio_vreg";
-		startup-delay-us = <4000>;
-		enable-active-high;
-		regulator-boot-on;
-		gpio = <&tlmm 31 0>;
-	 };
-	vdd_boost_vreg: vdd_boost_vreg {
-		compatible = "regulator-fixed";
-		regulator-name = "vdd_boost_vreg";
-		startup-delay-us = <4000>;
-		enable-active-high;
-		regulator-always-on;
-		gpio = <&pm8150b_gpios 5 0>;
-	 };
-	disp_vci_vreg: disp_vci_vreg {
-		compatible = "regulator-fixed";
-		regulator-name = "disp_vci_vreg";
-		start-delay-us = <4000>;
-		enable-active-high;
-		regulator-boot-on;
-		gpio = <&tlmm 7 0>;
-	};
+				touch_vddio_vreg {
+				compatible = "regulator-fixed";
+				regulator-name = "disp_vddio_vreg";
+				startup-delay-us = <0xfa0>;
+				enable-active-high;
+				regulator-boot-on;
+				gpio = <0xffffffff 0x1f 0x00>;
+				phandle = <0xad>;
+			};
 
-	dsi_amoled_panel_pwr_external_supply: dsi_amoled_panel_pwr_external_supply {
-		#address-cells = <1>;
-		#size-cells = <0>;
+			vdd_boost_vreg {
+				compatible = "regulator-fixed";
+				regulator-name = "vdd_boost_vreg";
+				startup-delay-us = <0xfa0>;
+				enable-active-high;
+				regulator-always-on;
+				gpio = <0x87 0x05 0x00>;
+				phandle = <0xae>;
+			};
 
-		qcom,panel-supply-entry@0 {
-			reg = <0>;
-			qcom,supply-name = "vddio";
-			qcom,supply-min-voltage = <1800000>;
-			qcom,supply-max-voltage = <1800000>;
-			qcom,supply-enable-load = <62000>;
-			qcom,supply-disable-load = <80>;
-			//qcom,supply-post-on-sleep = <20>;
-		};
+			disp_vci_vreg {
+				compatible = "regulator-fixed";
+				regulator-name = "disp_vci_vreg";
+				start-delay-us = <0xfa0>;
+				enable-active-high;
+				regulator-boot-on;
+				gpio = <0xffffffff 0x07 0x00>;
+				phandle = <0x130>;
+			};
 
-		qcom,panel-supply-entry@1 {
-			reg = <1>;
-			qcom,supply-name = "vcie";
-			qcom,supply-min-voltage = <3000000>;
-			qcom,supply-max-voltage = <3000000>;
-			qcom,supply-enable-load = <62000>;
-			qcom,supply-disable-load = <80>;
-			qcom,supply-post-on-sleep = <10>;
-			qcom,supply-pre-off-sleep = <10>;
-		};
-	};
-	fingerprint_goodix {
-		compatible = "goodix,fingerprint";
-		goodix,gpio-reset = <&tlmm 37 0x0>;
-		goodix,gpio-irq = <&tlmm 120 0x0>;
-		/* fp-gpio-pwr = <&tlmm 125 0>; */
-		status = "ok";
-	};
-	fp_vdd_vreg: fp_vdd_vreg {
-		compatible = "regulator-fixed";
-		regulator-name = "fp_vdd_vreg";
-		startup-delay-us = <4000>;
-		enable-active-high;
-		gpio = <&tlmm 125 0>;
-		regulator-always-on;
-	};
-	fingerprint_fpc {
-		status = "ok";
-		compatible = "fpc,fpc1020";
-		interrupt-parent = <&tlmm>;
-		interrupts = <118 0x0>;
-		fpc,gpio_irq = <&tlmm 118 0x0>;
-		/* fpc,enable-on-boot; */
-		/* fpc,enable-wakeup;  */
+			dsi_amoled_panel_pwr_external_supply {
+				#address-cells = <0x01>;
+				#size-cells = <0x00>;
+				phandle = <0x1c>;
 
-		pinctrl-names = "fpc1020_reset_reset",
-			"fpc1020_reset_active";
+				qcom,panel-supply-entry@0 {
+					reg = <0x00>;
+					qcom,supply-name = "vddio";
+					qcom,supply-min-voltage = <0x1b7740>;
+					qcom,supply-max-voltage = <0x1b7740>;
+					qcom,supply-enable-load = <0xf230>;
+					qcom,supply-disable-load = <0x50>;
+				};
 
-		pinctrl-0 = <&msm_gpio_119>;
-		pinctrl-1 = <&msm_gpio_119_output_high>;
-	};
-	pcie0: qcom,pcie@1c00000 {
-		status = "disabled";
-	};
+				qcom,panel-supply-entry@1 {
+					reg = <0x01>;
+					qcom,supply-name = "vcie";
+					qcom,supply-min-voltage = <0x2dc6c0>;
+					qcom,supply-max-voltage = <0x2dc6c0>;
+					qcom,supply-enable-load = <0xf230>;
+					qcom,supply-disable-load = <0x50>;
+					qcom,supply-post-on-sleep = <0x0a>;
+					qcom,supply-pre-off-sleep = <0x0a>;
+				};
+			};
 
-	disp_vci_vreg_f1x: disp_vci_vreg_f1x {
-		compatible = "regulator-fixed";
-		regulator-name = "disp_vci_vreg";
-		start-delay-us = <4000>;
-		enable-active-high;
-		regulator-boot-on;
-		gpio = <&tlmm 21 0>;
-	};
-	xiaomi_touch {
-		compatible = "xiaomi-touch";
-		status = "ok";
-		touch,name = "xiaomi-touch";
-	};
-	thermal_message: thermal-message {
-		board-sensor = "VIRTUAL-SENSOR";
-	};
+			fingerprint_goodix {
+				compatible = "goodix,fingerprint";
+				goodix,gpio-reset = <0xffffffff 0x25 0x00>;
+				goodix,gpio-irq = <0xffffffff 0x78 0x00>;
+				status = "ok";
+			};
+
+			fp_vdd_vreg {
+				compatible = "regulator-fixed";
+				regulator-name = "fp_vdd_vreg";
+				startup-delay-us = <0xfa0>;
+				enable-active-high;
+				gpio = <0xffffffff 0x7d 0x00>;
+				regulator-always-on;
+				phandle = <0x131>;
+			};
+
+			fingerprint_fpc {
+				status = "ok";
+				compatible = "fpc,fpc1020";
+				interrupt-parent = <0xffffffff>;
+				interrupts = <0x76 0x00>;
+				fpc,gpio_irq = <0xffffffff 0x76 0x00>;
+				pinctrl-names = "fpc1020_reset_reset\0fpc1020_reset_active";
+				pinctrl-0 = <0xa8>;
+				pinctrl-1 = <0xa9>;
+			};
+
+			qcom,pcie@1c00000 {
+				status = "disabled";
+				phandle = <0x132>;
+			};
+
+			disp_vci_vreg_f1x {
+				compatible = "regulator-fixed";
+				regulator-name = "disp_vci_vreg";
+				start-delay-us = <0xfa0>;
+				enable-active-high;
+				regulator-boot-on;
+				gpio = <0xffffffff 0x15 0x00>;
+				phandle = <0x6a>;
+			};
+
+			xiaomi_touch {
+				compatible = "xiaomi-touch";
+				status = "ok";
+				touch,name = "xiaomi-touch";
+			};
+
+			thermal-message {
+				board-sensor = "VIRTUAL-SENSOR";
+				phandle = <0x133>;
+			};
 };
 
 &sde_dsi {
@@ -180,84 +189,90 @@ And public attribution of xiaomi platforms(like F1X and so and)
 	status = "ok";
 	fts@49 {
 		compatible = "st,fts";
-		reg = <0x49>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <122 0x2008>;
-		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend";
-		pinctrl-0 = <&ts_active>;
-		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-		avdd-supply = <&pm8150l_l1>;
-		vdd-supply = <&touch_vddio_vreg>;
-		fts,pwr-reg-name = "avdd";
-		fts,bus-reg-name = "vdd";
-		fts,irq-gpio = <&tlmm 122 0x2008>;
-		fts,irq-gpio-name = "fts_irq";
-		fts,reset-gpio-enable;
-		fts,reset-gpio = <&tlmm 12 0x00>;
-		fts,reset-gpio-name = "fts_rst";
-		fts,irq-flags = <0x2008>; /* IRQF_ONESHOT | IRQF_TRIGGER_LOW */
-		fts,x-max = <1080>;
-		fts,y-max = <2340>;
-		fts,default-fw-name = "st_fts_f1x.ftb";
-		fts,config-array-size = <1>;
-		fts,dump-click-count;
-		fts,touch-up-threshold-min = <40>;
-		fts,touch-up-threshold-max = <120>;
-		fts,touch-up-threshold-def = <80>;
-		fts,touch-tolerance-min = <5>;
-		fts,touch-tolerance-max = <35>;
-		fts,touch-tolerance-def = <25>;
-		fts,edgefilter-leftrigt-def = <45>;
-		fts,edgefilter-topbottom-def = <0>;
-		fts,edgefilter-top-ingamemode = <65>;
-		fts,edgefilter-bottom-ingamemode = <0>;
-		fts,edgefilter-area-step1 = <100>;
-		fts,edgefilter-area-step2 = <150>;
-		fts,edgefilter-area-step3 = <250>;
-		fts,touch-idletime-min = <0>;
-		fts,touch-idletime-max = <12750>;
-		fts,touch-idletime-def = <12450>;
-		fts,cfg_0 {
-			fts,tp-vendor = <0x48>;
-			fts,fw-name = "st_fts_f1x.ftb";
-			fts,limit-name = "stm_fts_production_limits.csv";
-			fts,clicknum-file-name = "fts+sdc";
-		};
+				reg = <0x49>;
+				interrupt-parent = <0xffffffff>;
+				interrupts = <0x7a 0x2008>;
+				pinctrl-names = "pmx_ts_active\0pmx_ts_suspend";
+				pinctrl-0 = <0xaa>;
+				pinctrl-1 = <0xab 0xac>;
+				avdd-supply = <0xffffffff>;
+				vdd-supply = <0xad>;
+				fts,pwr-reg-name = "avdd";
+				fts,bus-reg-name = "vdd";
+				fts,irq-gpio = <0xffffffff 0x7a 0x2008>;
+				fts,irq-gpio-name = "fts_irq";
+				fts,reset-gpio-enable;
+				fts,reset-gpio = <0xffffffff 0x0c 0x00>;
+				fts,reset-gpio-name = "fts_rst";
+				fts,irq-flags = <0x2008>;
+				fts,x-max = <0x438>;
+				fts,y-max = <0x924>;
+				fts,default-fw-name = "st_fts_f1x.ftb";
+				fts,config-array-size = <0x01>;
+				fts,dump-click-count;
+				fts,touch-up-threshold-min = <0x28>;
+				fts,touch-up-threshold-max = <0x78>;
+				fts,touch-up-threshold-def = <0x50>;
+				fts,touch-tolerance-min = <0x05>;
+				fts,touch-tolerance-max = <0x23>;
+				fts,touch-tolerance-def = <0x19>;
+				fts,touch-wgh-min-def = <0x00>;
+				fts,touch-wgh-min-max = <0x0f>;
+				fts,touch-wgh-min-min = <0x00>;
+				fts,touch-wgh-max-def = <0x0e>;
+				fts,touch-wgh-max-max = <0x0f>;
+				fts,touch-wgh-max-min = <0x00>;
+				fts,touch-wgh-step-def = <0x02>;
+				fts,touch-wgh-step-max = <0x02>;
+				fts,touch-wgh-step-min = <0x00>;
+				fts,edgefilter-leftrigt-def = <0x2d>;
+				fts,edgefilter-topbottom-def = <0x00>;
+				fts,edgefilter-top-ingamemode = <0x41>;
+				fts,edgefilter-bottom-ingamemode = <0x00>;
+				fts,edgefilter-area-step1 = <0x64>;
+				fts,edgefilter-area-step2 = <0xaa>;
+				fts,edgefilter-area-step3 = <0xfa>;
+				fts,touch-idletime-min = <0x00>;
+				fts,touch-idletime-max = <0x31ce>;
+				fts,touch-idletime-def = <0x30a2>;
+
+				fts,cfg_0 {
+					fts,tp-vendor = <0x48>;
+					fts,fw-name = "st_fts_f1x.ftb";
+					fts,limit-name = "stm_fts_production_limits.csv";
+					fts,clicknum-file-name = "fts+sdc";
+				};
 	};
 	goodix@5d {
-		compatible = "goodix,gt9885";
-		reg = <0x5d>;
-		status = "ok";
-		interrupt-parent = <&tlmm>;
-		interrupts = <122 0x2800>;
-		vtouch-source-supply = <&vdd_boost_vreg>;
-		vtouch-supply = <&touch_vddio_vreg>;
-		iotouch-supply = <&pm8150l_l1>;
-		vtouch-load = <600000>;
-		pinctrl-names = "pmx_ts_active","pmx_ts_suspend";
-		pinctrl-0 = <&ts_active>;
-		pinctrl-1 = <&ts_int_suspend &ts_reset_suspend>;
-		goodix,reset-gpio = <&tlmm 12 0x0>;
-		goodix,irq-gpio = <&tlmm 122 0x2800>;
-		goodix,irq-flags = <2>; /* 1:trigger rising, 2:trigger falling;*/
-		goodix,panel-max-id = <10>;
-		goodix,panel-max-x = <1079>;
-		goodix,panel-max-y = <2339>;
-		goodix,panel-max-w = <127>;
-		goodix,panel-max-p = <127>;
-		goodix,panel-max-fod = <127>;
-	/*	goodix,panel-key-map = <158 172 217>; */ /*KEY_BACK, KEY_HOMEPAGE, KEY_SEARCH*/
-		goodix,power-on-delay-us = <300000>; /*300ms*/
-		goodix,power-off-delay-us = <5000>;
-		goodix,cfg-name = "goodix_gt9885_cfg_f1u.bin";
-	/*	goodix,swap-axis; */
-	/*	goodix,pen-enable; */
-	/*	goodix,key-of-pen = <331 332>; */ /*BTN_STYLUS, BTN_STYLUS2*/
-		sensor1 {
-				normal-cfg = [
-				];
-				goodix,fw-name = "goodix_gt9885_fw_f1u.bin";
-		};
+		                compatible = "goodix,gt9885";
+				reg = <0x5d>;
+				status = "ok";
+				interrupt-parent = <0xffffffff>;
+				interrupts = <0x7a 0x2800>;
+				vtouch-source-supply = <0xae>;
+				vtouch-supply = <0xad>;
+				iotouch-supply = <0xffffffff>;
+				vtouch-load = <0x927c0>;
+				pinctrl-names = "pmx_ts_active\0pmx_ts_suspend";
+				pinctrl-0 = <0xaa>;
+				pinctrl-1 = <0xab 0xac>;
+				goodix,reset-gpio = <0xffffffff 0x0c 0x00>;
+				goodix,irq-gpio = <0xffffffff 0x7a 0x2800>;
+				goodix,irq-flags = <0x02>;
+				goodix,panel-max-id = <0x0a>;
+				goodix,panel-max-x = <0x437>;
+				goodix,panel-max-y = <0x923>;
+				goodix,panel-max-w = <0x7f>;
+				goodix,panel-max-p = <0x7f>;
+				goodix,panel-max-fod = <0x7f>;
+				goodix,power-on-delay-us = <0x493e0>;
+				goodix,power-off-delay-us = <0x1388>;
+				goodix,cfg-name = "goodix_gt9885_cfg_f1u.bin";
+
+				sensor1 {
+					normal-cfg;
+					goodix,fw-name = "goodix_gt9885_fw_f1u.bin";
+				};
 	};
 };
 
