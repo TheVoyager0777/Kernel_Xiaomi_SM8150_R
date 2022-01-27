@@ -18,12 +18,12 @@ export KBUILD_BUILD_HOST="Voayger-sever"
 export KBUILD_BUILD_USER="TheVoyager"
 
 # make mrproper O=out || exit 1
-make raphael_defconfig O=out_raphael || exit 1
+make crux_defconfig O=out_crux || exit 1
 
 Start=$(date +"%s")
 
 make -j$(nproc --all) \
-	O=out_raphael \
+	O=out_crux \
 	CC="${ccache_} ${CLANG_PATH}/bin/clang" \
 	CLANG_TRIPLE=/bin/aarch64-linux-gnu- \
 	CROSS_COMPILE=/bin/aarch64-linux-gnu- \
