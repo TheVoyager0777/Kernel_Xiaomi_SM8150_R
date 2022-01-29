@@ -443,6 +443,59 @@ static ssize_t mipi_reg_store(struct device *device,
 	return dsi_display_mipi_reg_write(connector, (char *)buf, count);;
 }
 
+void drm_bridge_disp_count_set(struct drm_bridge *bridge, const char *buf);
+static ssize_t disp_count_store(struct device *device,
+			   struct device_attribute *attr,
+			   const char *buf, size_t count)
+{
+	struct drm_connector *connector = NULL;
+	struct drm_encoder *encoder = NULL;
+	struct drm_bridge *bridge = NULL;
+
+	connector = to_drm_connector(device);
+	if (!connector)
+		return count;
+
+	encoder = connector->encoder;
+	if (!encoder)
+		return count;
+
+	bridge = encoder->bridge;
+	if (!bridge)
+		return count;
+
+	drm_bridge_disp_count_set(bridge, buf);
+
+	return count;
+}
+
+ssize_t drm_bridge_disp_count_get(struct drm_bridge *bridge, char *buf);
+static ssize_t disp_count_show(struct device *device,
+			   struct device_attribute *attr,
+			   char *buf)
+{
+	ssize_t ret = 0;
+	struct drm_connector *connector = NULL;
+	struct drm_encoder *encoder = NULL;
+	struct drm_bridge *bridge = NULL;
+
+	connector = to_drm_connector(device);
+	if (!connector)
+		return ret;
+
+	encoder = connector->encoder;
+	if (!encoder)
+		return ret;
+
+	bridge = encoder->bridge;
+	if (!bridge)
+		return ret;
+
+	ret = drm_bridge_disp_count_get(bridge, buf);
+
+	return ret;
+}
+
 static ssize_t thermal_hbm_disabled_store(struct device *device,
 			   struct device_attribute *attr,
 			   const char *buf, size_t count)

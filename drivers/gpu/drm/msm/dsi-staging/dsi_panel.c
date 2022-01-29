@@ -90,6 +90,7 @@ extern struct frame_stat fm_stat;
 struct dsi_panel *g_panel;
 int panel_disp_param_send_lock(struct dsi_panel *panel, int param);
 int dsi_display_read_panel(struct dsi_panel *panel, struct dsi_read_config *read_config);
+static void dsi_panel_count(struct dsi_panel *panel, int enable);
 #if DSI_READ_WRITE_PANEL_DEBUG
 static int string_merge_into_buf(const char *str, int len, char *buf);
 static struct dsi_read_config read_reg;
@@ -907,6 +908,101 @@ ssize_t dsi_panel_get_doze_backlight(struct dsi_display *display, char *buf)
 	mutex_unlock(&panel->panel_lock);
 
 	return rc;
+}
+
+static void dsi_panel_HBM_count(struct dsi_panel *panel, int enable, int off)
+{
+	static u64 timestamp_hbmon;
+	static u64 enable_times;
+	static int last_HBM_status;
+	char ch[64] = {0};
+	bool record = false;
+
+	pr_info("dsi_HBM_enable_times[%llu],hbm_times[%lld],en[%d] off[%d]\n", enable_times, panel->hbm_times, enable, off);
+
+	if (off) {
+		if (last_HBM_status == 1 && enable_times > panel->hbm_times)
+			record = true;
+	} else {
+		if (enable) {
+			if (last_HBM_status == 1 && enable_times > panel->hbm_times) {
+				record = true;
+			} else {
+				/* get HBM on timestamp */
+				timestamp_hbmon = get_jiffies_64();
+				enable_times++;
+			}
+		} else {
+			record = true;
+		}
+	}
+
+	if (record) {
+		/* caculate panel hbm duration */
+		panel->hbm_duration += get_jiffies_64() - timestamp_hbmon;
+		snprintf(ch, sizeof(ch), "%llu", panel->hbm_duration / HZ);
+		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_DRUATION, ch);
+
+		/* caculate panel hbm times */
+		memset(ch, 0, sizeof(ch));
+		panel->hbm_times++;
+		snprintf(ch, sizeof(ch), "%llu", panel->hbm_times);
+		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_TIMES, ch);
+	}
+
+	last_HBM_status = enable;
+
+	return;
+}
+
+static void dsi_panel_bl_count(struct dsi_panel *panel, u32 bl_lvl)
+{
+	static u32 last_bl_level;
+	static u64 last_bl_start;
+	u64 bl_level_end = 0;
+	char ch[64] = {0};
+
+	bl_level_end = get_jiffies_64();
+
+	if (last_bl_start == 0) {
+		last_bl_level = bl_lvl;
+		last_bl_start = bl_level_end;
+		return;
+	}
+
+	if (last_bl_level > 0) {
+		panel->bl_level_integral += last_bl_level * (bl_level_end - last_bl_start);
+		panel->bl_duration += (bl_level_end - last_bl_start);
+	}
+
+	/* backlight level 3071 ==> 450 nit */
+	if (last_bl_level > (panel->bl_config.bl_max_level*3/4)) {
+		panel->bl_highlevel_duration += (bl_level_end - last_bl_start);
+	} else if (last_bl_level > 0) {
+		/* backlight level (0, 3071] */
+		panel->bl_lowlevel_duration += (bl_level_end - last_bl_start);
+	}
+
+	last_bl_level = bl_lvl;
+	last_bl_start = bl_level_end;
+
+	if (bl_lvl == 0) {
+		memset(ch, 0, sizeof(ch));
+		if (panel->bl_duration > 0) {
+			snprintf(ch, sizeof(ch), "%llu", panel->bl_level_integral / panel->bl_duration);
+			update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BL_AVG, ch);
+		}
+
+		memset(ch, 0, sizeof(ch));
+		snprintf(ch, sizeof(ch), "%llu", panel->bl_highlevel_duration / HZ);
+		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BL_HIGH, ch);
+
+		memset(ch, 0, sizeof(ch));
+		snprintf(ch, sizeof(ch), "%llu", panel->bl_lowlevel_duration / HZ);
+		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BL_LOW, ch);
+	}
+
+	return;
 }
 
 bool dc_skip_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
@@ -4041,6 +4137,8 @@ static int dsi_panel_parse_mi_config(struct dsi_panel *panel,
 	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_DRUATION, "0");
 	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_TIMES, "0");
 
+	dsi_panel_count(panel, 1);
+	
 	return rc;
 }
 
@@ -6094,6 +6192,71 @@ int panel_disp_param_send(struct dsi_display *display, int param_type)
 	return rc;
 }
 
+static void dsi_panel_count(struct dsi_panel *panel, int enable)
+{
+	static u64 timestamp_panelon;
+	static u64 on_times;
+	static u64 off_times;
+	char ch[64] = {0};
+
+	if (enable) {
+		/* get panel on timestamp */
+		timestamp_panelon = get_jiffies_64();
+		on_times++;
+		panel->panel_active_count_enable = true;
+	} else {
+		struct timespec64 now_boot;
+		u32 delta_days = 0;
+		struct timespec rtctime;
+
+		off_times++;
+		pr_info("%s: on_times[%llu] off_times[%llu]\n", __func__, on_times, off_times);
+
+		/* caculate panel active duration */
+		panel->panel_active += get_jiffies_64() - timestamp_panelon;
+		snprintf(ch, sizeof(ch), "%llu", panel->panel_active / HZ);
+		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_ACTIVE, ch);
+
+		memset(ch, 0, sizeof(ch));
+		snprintf(ch, sizeof(ch), "%llu", panel->kickoff_count / 60);
+		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_REFRESH, ch);
+
+		get_monotonic_boottime64(&now_boot);
+		memset(ch, 0, sizeof(ch));
+		snprintf(ch, sizeof(ch), "%llu", panel->boottime+now_boot.tv_sec);
+		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BOOTTIME, ch);
+
+		getnstimeofday(&rtctime);
+		if (panel->bootRTCtime != 0) {
+			if (rtctime.tv_sec > panel->bootRTCtime) {
+				if (rtctime.tv_sec - panel->bootRTCtime > 10 * 365 * DAY_SECS) {
+					panel->bootRTCtime = rtctime.tv_sec;
+				} else {
+					if (rtctime.tv_sec - panel->bootRTCtime > DAY_SECS) {
+						delta_days = (rtctime.tv_sec - panel->bootRTCtime) / DAY_SECS;
+						panel->bootdays += delta_days;
+						panel->bootRTCtime = rtctime.tv_sec -
+							((rtctime.tv_sec - panel->bootRTCtime) % DAY_SECS);
+					}
+				}
+			} else {
+				pr_err("RTC time rollback!\n");
+				panel->bootRTCtime = rtctime.tv_sec;
+			}
+		} else {
+			pr_info("panel_info.bootRTCtime init!\n");
+			panel->bootRTCtime = rtctime.tv_sec;
+		}
+		memset(ch, 0, sizeof(ch));
+		snprintf(ch, sizeof(ch), "%llu", panel->bootdays);
+		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_DAYS, ch);
+
+		panel->panel_active_count_enable = false;
+	}
+
+	return;
+}
+
 int dsi_panel_mode_switch_to_cmd(struct dsi_panel *panel)
 {
 	int rc = 0;
@@ -6173,60 +6336,26 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 int dsi_panel_enable(struct dsi_panel *panel)
 {
 	int rc = 0;
-	u32 count = 0;
 
 	if (!panel) {
 		pr_err("Invalid params\n");
 		return -EINVAL;
 	}
 
-	count = panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_DISP_BC_120HZ].count;
-
 	mutex_lock(&panel->panel_lock);
 
+	if (!panel->panel_active_count_enable)
+		dsi_panel_count(panel, 1);
+
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
-	if (rc)
+	if (rc){
 		pr_err("[%s] failed to send DSI_CMD_SET_ON cmds, rc=%d\n",
 		       panel->name, rc);
-	else
-		panel->panel_initialized = true;
-
-	if (count && (panel->cur_mode->timing.refresh_rate == 120)) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_BC_120HZ);
-		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_DISP_BC_120HZ cmd, rc=%d\n",
-					panel->name, rc);
 	}
-
-	if (panel->bl_config.xiaomi_f4_41_flag && panel->dc_enable && panel->dc_demura_threshold) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_DC_ON);
-		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_DISP_DC_ON cmd, rc=%d\n",
-					panel->name, rc);
-	}
-
-	if (panel->bl_config.xiaomi_f4_36_flag && panel->dc_enable) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_DC_ON);
-		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_DISP_DC_ON cmd, rc=%d\n",
-					panel->name, rc);
-	}
-	if (panel->dc_type == 0 && panel->dc_enable) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_DC_ON);
-		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_DISP_DC_ON cmd, rc=%d\n",
-			panel->name, rc);
-	}
-
-
-	panel->hbm_enabled = false;
+	panel->panel_initialized = true;
 	panel->fod_hbm_enabled = false;
-	panel->fod_dimlayer_hbm_enabled = false;
 	panel->in_aod = false;
-	panel->backlight_pulse_flag = false;
-	panel->backlight_demura_level = 0;
 	panel->skip_dimmingon = STATE_NONE;
-	idle_status = false;
 
 	mutex_unlock(&panel->panel_lock);
 	pr_info("[SDE] %s: DSI_CMD_SET_ON\n", __func__);
@@ -6292,16 +6421,6 @@ int dsi_panel_disable(struct dsi_panel *panel)
 	/* Avoid sending panel off commands when ESD recovery is underway */
 	if (!atomic_read(&panel->esd_recovery_pending)) {
 		panel->panel_initialized = false;
-		/*
-		 * Need to set IBB/AB regulator mode to STANDBY,
-		 * if panel is going off from AOD mode.
-		 */
-		if (dsi_panel_is_type_oled(panel) &&
-		      (panel->power_mode == SDE_MODE_DPMS_LP1 ||
-		       panel->power_mode == SDE_MODE_DPMS_LP2))
-			dsi_pwr_panel_regulator_mode_set(&panel->power_info,
-				"ibb", REGULATOR_MODE_STANDBY);
-
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
 		if (rc) {
 			/*
@@ -6315,23 +6434,24 @@ int dsi_panel_disable(struct dsi_panel *panel)
 			rc = 0;
 		}
 	}
-	panel->panel_initialized = false;
-	panel->power_mode = SDE_MODE_DPMS_OFF;
 
+	if (panel->panel_active_count_enable)
+		dsi_panel_count(panel, 0);
+
+	dsi_panel_HBM_count(panel, 0, 1);
+
+	panel->panel_initialized = false;
 	panel->skip_dimmingon = STATE_NONE;
 	panel->fod_hbm_enabled = false;
-	panel->hbm_enabled = false;
-	panel->fod_dimlayer_hbm_enabled = false;
 	panel->in_aod = false;
-	panel->backlight_pulse_flag = false;
-	panel->backlight_demura_level = 0;
 	panel->fod_backlight_flag = false;
+	panel->dc_enable = false;
 
 	mutex_unlock(&panel->panel_lock);
-
 	pr_info("[SDE] %s: DSI_CMD_SET_OFF\n", __func__);
 	return rc;
 }
+
 
 int dsi_panel_unprepare(struct dsi_panel *panel)
 {
@@ -6386,6 +6506,200 @@ int dsi_panel_post_unprepare(struct dsi_panel *panel)
 error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;
+}
+
+int dsi_panel_disp_count_set(struct dsi_display *display, const char *buf)
+{
+	char count_str[64] = {0};
+	u64 panel_active = 0;
+	u64 kickoff_count = 0;
+	u64 kernel_boottime = 0;
+	u64 kernel_rtctime = 0;
+	u64 kernel_days = 0;
+	u64 record_end = 0;
+	u32 delta_days = 0;
+	u64 bl_duration = 0;
+	u64 bl_level_integral = 0;
+	u64 bl_highlevel_duration = 0;
+	u64 bl_lowlevel_duration = 0;
+	u64 hbm_duration = 0;
+	u64 hbm_times = 0;
+
+	ssize_t result;
+	struct timespec rtctime;
+
+	struct dsi_panel *panel = NULL;
+	struct drm_device *drm_dev = NULL;
+
+	pr_info("[LCD] %s: begin\n", __func__);
+
+	if (!display || !display->panel || !display->drm_dev) {
+		pr_err("invalid display/panel/drm_dev\n");
+		return -EINVAL;
+	}
+
+	panel = display->panel;
+	drm_dev = display->drm_dev;
+
+	result = sscanf(buf,
+		"panel_active=%llu\n"
+		"panel_kickoff_count=%llu\n"
+		"kernel_boottime=%llu\n"
+		"kernel_rtctime=%llu\n"
+		"kernel_days=%llu\n"
+		"bl_duration=%llu\n"
+		"bl_level_integral=%llu\n"
+		"bl_highlevel_duration=%llu\n"
+		"bl_lowlevel_duration=%llu\n"
+		"hbm_duration=%llu\n"
+		"hbm_times=%llu\n"
+		"record_end=%llu\n",
+		&panel_active,
+		&kickoff_count,
+		&kernel_boottime,
+		&kernel_rtctime,
+		&kernel_days,
+		&bl_duration,
+		&bl_level_integral,
+		&bl_highlevel_duration,
+		&bl_lowlevel_duration,
+		&hbm_duration,
+		&hbm_times,
+		&record_end);
+
+	if (result != 12) {
+		pr_err("sscanf buf error!\n");
+		return -EINVAL;
+	}
+#if 0
+	if (panel_active < panel.panel_active) {
+		pr_err("Current panel_active < panel_info.panel_active!\n");
+		return -EINVAL;
+	}
+
+	if (kickoff_count < panel.kickoff_count) {
+		pr_err("Current kickoff_count < panel_info.kickoff_count!\n");
+		return -EINVAL;
+	}
+#endif
+
+	getnstimeofday(&rtctime);
+	if (rtctime.tv_sec > kernel_rtctime) {
+		if (rtctime.tv_sec - kernel_rtctime > 10 * 365 * DAY_SECS) {
+			panel->bootRTCtime = rtctime.tv_sec;
+		} else {
+			if (rtctime.tv_sec - kernel_rtctime > DAY_SECS) {
+				delta_days = (rtctime.tv_sec - kernel_rtctime) / DAY_SECS;
+				panel->bootRTCtime = rtctime.tv_sec - ((rtctime.tv_sec - kernel_rtctime) % DAY_SECS);
+			} else {
+				panel->bootRTCtime = kernel_rtctime;
+			}
+		}
+	} else {
+		pr_err("RTC time rollback!\n");
+		panel->bootRTCtime = kernel_rtctime;
+	}
+
+	panel->panel_active = panel_active;
+	snprintf(count_str, sizeof(count_str), "%llu", panel->panel_active/HZ);
+	update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_ACTIVE, count_str);
+
+	memset(count_str, 0, sizeof(count_str));
+	panel->kickoff_count = kickoff_count;
+	snprintf(count_str, sizeof(count_str), "%llu", panel->kickoff_count/60);
+	update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_REFRESH, count_str);
+
+	memset(count_str, 0, sizeof(count_str));
+	panel->boottime = kernel_boottime;
+	snprintf(count_str, sizeof(count_str), "%llu", panel->boottime);
+	update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BOOTTIME, count_str);
+
+	memset(count_str, 0, sizeof(count_str));
+	panel->bootdays = kernel_days + delta_days;
+	snprintf(count_str, sizeof(count_str), "%llu", panel->bootdays);
+	update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_DAYS, count_str);
+
+	memset(count_str, 0, sizeof(count_str));
+	panel->bl_level_integral = bl_level_integral;
+	panel->bl_duration = bl_duration;
+	if (panel->bl_duration > 0) {
+		snprintf(count_str, sizeof(count_str), "%llu", panel->bl_level_integral / panel->bl_duration);
+		update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BL_AVG, count_str);
+	}
+
+	memset(count_str, 0, sizeof(count_str));
+	panel->bl_highlevel_duration = bl_highlevel_duration;
+	snprintf(count_str, sizeof(count_str), "%llu", panel->bl_highlevel_duration);
+	update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BL_HIGH, count_str);
+
+	memset(count_str, 0, sizeof(count_str));
+	panel->bl_lowlevel_duration = bl_lowlevel_duration;
+	snprintf(count_str, sizeof(count_str), "%llu", panel->bl_lowlevel_duration);
+	update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BL_LOW, count_str);
+
+	memset(count_str, 0, sizeof(count_str));
+	panel->hbm_duration = hbm_duration;
+	snprintf(count_str, sizeof(count_str), "%llu", panel->hbm_duration);
+	update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_DRUATION, count_str);
+
+	memset(count_str, 0, sizeof(count_str));
+	panel->hbm_times = hbm_times;
+	snprintf(count_str, sizeof(count_str), "%llu", panel->hbm_times);
+	update_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_TIMES, count_str);
+	pr_info("[LCD] %s: end\n", __func__);
+
+	return 0;
+}
+
+ssize_t dsi_panel_disp_count_get(struct dsi_display *display, char *buf)
+{
+	int ret = -1;
+	struct timespec64 now_boot;
+	u64 record_end = 0;
+	/* struct timespec rtctime; */
+	struct dsi_panel *panel = NULL;
+
+	if (!display || !display->panel || !display->drm_dev) {
+		pr_err("invalid display/panel/drm_dev\n");
+		return -EINVAL;
+	}
+
+	if (buf == NULL) {
+		pr_err("dsi_panel_disp_count_get buffer is NULL!\n");
+		return -EINVAL;
+	}
+
+	panel = display->panel;
+	get_monotonic_boottime64(&now_boot);
+	/* getnstimeofday(&rtctime); */
+
+	ret = scnprintf(buf, PAGE_SIZE,
+		"panel_active=%llu\n"
+		"panel_kickoff_count=%llu\n"
+		"kernel_boottime=%llu\n"
+		"kernel_rtctime=%llu\n"
+		"kernel_days=%llu\n"
+		"bl_duration=%llu\n"
+		"bl_level_integral=%llu\n"
+		"bl_highlevel_duration=%llu\n"
+		"bl_lowlevel_duration=%llu\n"
+		"hbm_duration=%llu\n"
+		"hbm_times=%llu\n"
+		"record_end=%llu\n",
+		panel->panel_active,
+		panel->kickoff_count,
+		panel->boottime + now_boot.tv_sec,
+		panel->bootRTCtime,
+		panel->bootdays,
+		panel->bl_duration,
+		panel->bl_level_integral,
+		panel->bl_highlevel_duration,
+		panel->bl_lowlevel_duration,
+		panel->hbm_duration,
+		panel->hbm_times,
+		record_end);
+
+	return ret;
 }
 
 int dsi_panel_write_cmd_set(struct dsi_panel *panel,

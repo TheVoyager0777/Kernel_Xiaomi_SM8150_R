@@ -280,6 +280,7 @@ struct dsi_panel {
 	u32 fod_off_dimming_delay;
 	ktime_t fod_backlight_off_time;
 	ktime_t fod_hbm_off_time;
+	bool hbm_51_ctrl_flag;
 	bool f4_51_ctrl_flag; /* For the f4_36 panel */
 	u32 hbm_ntfy_skip_flag;
 	u32 hbm_off_51_index;
