@@ -129,6 +129,7 @@ struct dsi_backlight_config {
 	u32 bl_scale;
 	u32 bl_scale_ad;
 	bool bl_inverted_dbv;
+	bool dcs_type_ss;
 	bool dcs_type_ss_ea;
 	bool dcs_type_ss_eb;
 	bool xiaomi_f4_36_flag;
