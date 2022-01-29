@@ -81,8 +81,8 @@ static inline void do_reclaim(void)
 		return;
 
 	for_each_zone(zone)
-		if (zone->_watermark[WMARK_LOW] > wmark_low_max)
-			wmark_low_max = zone->_watermark[WMARK_LOW];
+		if (zone->watermark[WMARK_LOW] > wmark_low_max)
+			wmark_low_max = zone->watermark[WMARK_LOW];
 
 	spin_lock(&pg_mi_reclaim->page_reclaim.reclaim_lock);
 	force_reclaim_type = pg_mi_reclaim->page_reclaim.reclaim_type;
