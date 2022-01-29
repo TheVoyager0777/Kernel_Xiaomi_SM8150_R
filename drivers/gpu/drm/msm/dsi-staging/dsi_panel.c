@@ -20,6 +20,7 @@
 #include <linux/of_gpio.h>
 #include <linux/pwm.h>
 #include <video/mipi_display.h>
+#include <asm/hwconf_manager.h>
 
 #include "dsi_panel.h"
 #include "dsi_display.h"
@@ -64,6 +65,24 @@
 #define MAX_PANEL_JITTER		10
 #define DEFAULT_PANEL_PREFILL_LINES	25
 #define TICKS_IN_MICRO_SECOND		1000000
+
+#define HWCONPONENT_NAME "display"
+#define HWCONPONENT_KEY_LCD "LCD"
+#define HWMON_CONPONENT_NAME "display"
+#define HWMON_KEY_ACTIVE "panel_active"
+#define HWMON_KEY_REFRESH "panel_refresh"
+#define HWMON_KEY_BOOTTIME "kernel_boottime"
+#define HWMON_KEY_DAYS "kernel_days"
+#define HWMON_KEY_BL_AVG "bl_level_avg"
+#define HWMON_KEY_BL_HIGH "bl_level_high"
+#define HWMON_KEY_BL_LOW "bl_level_low"
+#define HWMON_KEY_HBM_DRUATION "hbm_duration"
+#define HWMON_KEY_HBM_TIMES "hbm_times"
+
+#define DAY_SECS (60*60*24)
+#define XY_COORDINATE_NUM    2
+#define MAX_LUMINANCE_NUM    2
+
 #define to_dsi_display(x) container_of(x, struct dsi_display, host)
 static struct dsi_read_config g_dsi_read_cfg;
 
@@ -3859,42 +3878,67 @@ static void nolp_backlight_delayed_work(struct work_struct *work)
 	}
 }
 
+static void panelon_fod_enable_delayed_work(struct work_struct *work)
+{
+	struct dsi_panel *panel = container_of(work,
+				struct dsi_panel, fod_work.work);
+	struct dsi_display *display = NULL;
+	struct mipi_dsi_host *host = panel->host;
+
+	if (host)
+		display = container_of(host, struct dsi_display, host);
+
+	if (display && panel) {
+		mutex_lock(&display->display_lock);
+		if (panel->fod_dimlayer_bl_block && panel->panel_initialized) {
+			pr_info("fod_dimlayer_bl_block delay false\n");
+			panel->fod_dimlayer_bl_block = false;
+			dsi_panel_update_backlight(panel, panel->last_bl_lvl);
+		}
+		mutex_unlock(&display->display_lock);
+	}
+}
+
+static void panelon_esd_enable_delayed_work(struct work_struct *work)
+{
+	struct dsi_panel *panel = container_of(work,
+				struct dsi_panel, esd_work.work);
+	struct dsi_display *display = NULL;
+	struct mipi_dsi_host *host = panel->host;
+	if (host)
+		display = container_of(host, struct dsi_display, host);
+	if (display) {
+		mutex_lock(&display->display_lock);
+		panel_disp_param_send_lock(panel, DISPPARAM_ESD_ON);
+		mutex_unlock(&display->display_lock);
+	}
+}
+
 #define XY_COORDINATE_NUM    2
 static int dsi_panel_parse_mi_config(struct dsi_panel *panel,
 				     struct device_node *of_node)
 {
+	bool dispparam_enabled = 0;
 	int rc = 0;
-	struct dsi_parser_utils *utils;
 	u32 xy_coordinate[XY_COORDINATE_NUM] = {0};
+	u32 max_luminance[MAX_LUMINANCE_NUM] = {0};
+
+	struct dsi_parser_utils *utils;
 
 	if (panel == NULL)
 		return -EINVAL;
 
 	utils = &panel->utils;
 
-	panel->dispparam_enabled = utils->read_bool(of_node,
+	dispparam_enabled = utils->read_bool(of_node,
 							"qcom,dispparam-enabled");
-	if (panel->dispparam_enabled) {
-		pr_info("Dispparam enabled.\n");
+	if (dispparam_enabled){
+		pr_info("[LCD]%s:%d Dispparam enabled.\n", __func__, __LINE__);
+		panel->dispparam_enabled = true;
 	} else {
-		pr_info("Dispparam disabled.\n");
+		pr_info("[LCD]%s:%d Dispparam disabled.\n", __func__, __LINE__);
+		panel->dispparam_enabled = false;
 	}
-
-	rc = of_property_read_u32_array(of_node,
-		"qcom,mdss-dsi-panel-xy-coordinate",
-		xy_coordinate, XY_COORDINATE_NUM);
-
-	if (rc) {
-		pr_info("%s:%d, Unable to read panel xy coordinate\n",
-		       __func__, __LINE__);
-		panel->xy_coordinate_cmds.enabled = false;
-	} else {
-		panel->xy_coordinate_cmds.cmds_rlen = xy_coordinate[0];
-		panel->xy_coordinate_cmds.valid_bits = xy_coordinate[1];
-		panel->xy_coordinate_cmds.enabled = true;
-	}
-	pr_info("0x%x 0x%x enabled:%d\n",
-		xy_coordinate[0], xy_coordinate[1], panel->xy_coordinate_cmds.enabled);
 
 	rc = utils->read_u32(of_node,
 		"qcom,mdss-panel-on-dimming-delay", &panel->panel_on_dimming_delay);
@@ -3905,13 +3949,15 @@ static int dsi_panel_parse_mi_config(struct dsi_panel *panel,
 	} else {
 		pr_info("Panel on dimming delay %d ms\n", panel->panel_on_dimming_delay);
 	}
+	panel->cphy_esd_check = utils->read_bool(of_node,
+							"mi,cphy-esd-check");
 
 	INIT_DELAYED_WORK(&panel->cmds_work, panelon_dimming_enable_delayed_work);
+	INIT_DELAYED_WORK(&panel->fod_work, panelon_fod_enable_delayed_work);
+	INIT_DELAYED_WORK(&panel->esd_work, panelon_esd_enable_delayed_work);
 
-	INIT_DELAYED_WORK(&panel->nolp_bl_delay_work, nolp_backlight_delayed_work);
-
-	rc = of_property_read_u32(of_node,
-		"qcom,disp-doze-backlight-threshold", &panel->doze_backlight_threshold);
+	rc = utils->read_u32(of_node,
+			"qcom,disp-doze-backlight-threshold", &panel->doze_backlight_threshold);
 	if (rc) {
 		panel->doze_backlight_threshold = DOZE_MIN_BRIGHTNESS_LEVEL;
 		pr_info("default doze backlight threshold is %d\n", DOZE_MIN_BRIGHTNESS_LEVEL);
@@ -3928,108 +3974,62 @@ static int dsi_panel_parse_mi_config(struct dsi_panel *panel,
 		pr_info("fod_off_dimming_delay %d\n", panel->fod_off_dimming_delay);
 	}
 
-	panel->is_tddi_flag = utils->read_bool(of_node, "qcom,is-tddi-flag");
-	panel->f4_51_ctrl_flag = utils->read_bool(utils->data,
-			"qcom,dispparam-f4-51-ctrl-flag");
-
-	if (panel->f4_51_ctrl_flag) {
-		rc = utils->read_u32(of_node,
-				"qcom,mdss-dsi-panel-hbm-off-51-index", &panel->hbm_off_51_index);
-		if (rc) {
-			pr_err("qcom,mdss-dsi-panel-hbm-off-51-index not defined,but need\n");
-		}
-		rc = utils->read_u32(of_node,
-				"qcom,mdss-dsi-panel-fod-off-51-index", &panel->fod_off_51_index);
-		if (rc) {
-			pr_err("mi,mdss-dsi-panel-fod-off-51-index not defined,but need\n");
-		}
-	}
-
-	rc = utils->read_u32(of_node,
-			"qcom,disp-backlight-pulse-threshold", &panel->backlight_pulse_threshold);
-	if (rc) {
-		panel->backlight_pulse_threshold = BACKLIGHT_PLUSE_THRESHOLD;
-		pr_info("default backlight_pulse_threshold %d\n", BACKLIGHT_PLUSE_THRESHOLD);
-	} else {
-		pr_info("backlight_pulse_threshold %d\n", panel->backlight_pulse_threshold);
-	}
-
 	rc = of_property_read_u32(of_node,
-			"qcom,mdss-dsi-panel-dc-demura-threshold", &panel->dc_demura_threshold);
+			"qcom,mdss-dsi-panel-dc-threshold", &panel->dc_threshold);
 	if (rc) {
-		panel->dc_demura_threshold = 0;
-		pr_info("dc demura disabled\n");
+		panel->dc_threshold = 610;
+		pr_info("default dc backlight threshold is %d\n", panel->dc_threshold);
 	} else {
-		pr_info("dc demura threshold %d\n", panel->dc_demura_threshold);
-	}
-
-	rc = of_property_read_u32(of_node,
-			"qcom,mdss-dsi-panel-hbm-brightness", &panel->hbm_brightness);
-	if (rc) {
-		panel->hbm_brightness = 0;
-		pr_info("default hbm brightness is %d\n", panel->hbm_brightness);
-	} else {
-		pr_info("hbm brightness %d \n", panel->hbm_brightness);
+		pr_info("dc backlight threshold %d \n", panel->dc_threshold);
 	}
 
 	panel->fod_dimlayer_enabled = utils->read_bool(of_node,
-									"qcom,mdss-dsi-panel-fod-dimlayer-enabled");
+								"qcom,mdss-dsi-panel-fod-dimlayer-enabled");
 	if (panel->fod_dimlayer_enabled) {
 		pr_info("fod dimlayer enabled.\n");
 	} else {
 		pr_info("fod dimlayer disabled.\n");
 	}
 
-	panel->nolp_command_set_backlight_enabled = utils->read_bool(of_node,
-			"qcom,mdss-dsi-nolp-command-set-backlight-enabled");
-	if (panel->nolp_command_set_backlight_enabled) {
-		pr_info("nolp command set backlight enabled.\n");
+	panel->is_tddi_flag = utils->read_bool(of_node,
+								"mi,is-tddi-flag");
+	if (panel->is_tddi_flag) {
+		pr_info("panel is tddi.\n");
 	} else {
-		pr_info("nolp command set backlight disabled.\n");
-	}
-
-	panel->oled_panel_video_mode = utils->read_bool(of_node,
-			"qcom,mdss-dsi-oled-panel-video-mode");
-	if (panel->oled_panel_video_mode) {
-		pr_info("oled panel video mode enabled.\n");
-	} else {
-		pr_info("oled panel video mode disabled..\n");
-	}
-
-	rc = of_property_read_u32(of_node,
-		"mi,mdss-dsi-doze-hbm-brightness-value", &panel->doze_hbm_brightness);
-	if (rc || panel->doze_hbm_brightness <= 0) {
-	pr_err("can't get doze hbm brightness\n");
-	}
-
-	rc = of_property_read_u32(of_node,
-		"mi,mdss-dsi-doze-lbm-brightness-value", &panel->doze_lbm_brightness);
-	if (rc || panel->doze_lbm_brightness <= 0) {
-		pr_err("can't get doze lbm brightness\n");
-	}
-
- 	rc = of_property_read_u32(of_node,
-			"mi,mdss-dsi-panel-dc-threshold", &panel->dc_threshold);
-	if (rc) {
-		panel->dc_threshold = 488;
-		pr_info("default dc backlight threshold is %d\n", panel->dc_threshold);
-	} else {
-		pr_info("dc backlight threshold %d \n", panel->dc_threshold);
-	}
-
-	rc = of_property_read_u32(of_node,
-			"mi,mdss-dsi-panel-dc-type", &panel->dc_type);
-	if (rc) {
-		panel->dc_type = 1;
-		pr_info("default dc backlight type is %d\n", panel->dc_type);
-	} else {
-		pr_info("dc backlight type %d \n", panel->dc_type);
+		pr_info("panel is not tddi.\n");
 	}
 
 	dsi_panel_parse_elvss_dimming_config(panel);
 
-	panel->thermal_hbm_disabled = false;
-	panel->hbm_enabled = false;
+	rc = utils->read_u32_array(of_node,
+		"mi,mdss-dsi-panel-xy-coordinate",
+		xy_coordinate, XY_COORDINATE_NUM);
+	if (rc) {
+		pr_info("%s:%d, Unable to read panel xy coordinate\n",
+		       __func__, __LINE__);
+		panel->xy_coordinate_cmds.enabled = false;
+	} else {
+		panel->xy_coordinate_cmds.cmds_rlen = xy_coordinate[0];
+		panel->xy_coordinate_cmds.valid_bits = xy_coordinate[1];
+		panel->xy_coordinate_cmds.enabled = true;
+	}
+	pr_info("0x%x 0x%x enabled:%d\n",
+		xy_coordinate[0], xy_coordinate[1], panel->xy_coordinate_cmds.enabled);
+
+	rc = utils->read_u32_array(of_node,
+			"mi,mdss-dsi-panel-max-luminance",
+			max_luminance, MAX_LUMINANCE_NUM);
+	if (rc) {
+		pr_info("%s:%d, Unable to read panel max luminance\n",
+			   __func__, __LINE__);
+		panel->max_luminance_cmds.enabled = false;
+	} else {
+		panel->max_luminance_cmds.cmds_rlen = max_luminance[0];
+		panel->max_luminance_cmds.valid_bits = max_luminance[1];
+		panel->max_luminance_cmds.enabled = true;
+	}
+	pr_info("0x%x 0x%x enabled:%d\n",
+		max_luminance[0], max_luminance[1], panel->max_luminance_cmds.enabled);
 	panel->fod_hbm_enabled = false;
 	panel->fod_dimlayer_hbm_enabled = false;
 	panel->skip_dimmingon = STATE_NONE;
@@ -4037,12 +4037,32 @@ static int dsi_panel_parse_mi_config(struct dsi_panel *panel,
 	panel->backlight_delta = 1;
 	panel->fod_flag = false;
 	panel->in_aod = false;
-	panel->backlight_pulse_flag = false;
-	panel->backlight_demura_level = 0;
 	panel->fod_hbm_off_time = ktime_get();
 	panel->fod_backlight_off_time = ktime_get();
 
+	panel->panel_active_count_enable = false;
+	panel->panel_active = 0;
+	panel->kickoff_count = 0;
+	panel->bl_duration = 0;
+	panel->bl_level_integral = 0;
+	panel->bl_highlevel_duration = 0;
+	panel->bl_lowlevel_duration = 0;
+	panel->hbm_duration = 0;
+	panel->hbm_times = 0;
 	panel->dc_enable = false;
+	panel->panel_dead_flag = false;
+	panel->tddi_doubleclick_flag = false;
+
+	register_hw_monitor_info(HWMON_CONPONENT_NAME);
+	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_ACTIVE, "0");
+	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_REFRESH, "0");
+	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BOOTTIME, "0");
+	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_DAYS, "0");
+	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BL_AVG, "0");
+	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BL_HIGH, "0");
+	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_BL_LOW, "0");
+	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_DRUATION, "0");
+	add_hw_monitor_info(HWMON_CONPONENT_NAME, HWMON_KEY_HBM_TIMES, "0");
 
 	return rc;
 }
@@ -4057,6 +4077,8 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	struct dsi_parser_utils *utils;
 	const char *panel_physical_type;
 	int rc = 0;
+	bool dispparam_enabled = false;
+	static const char *panel_model;
 
 	panel = kzalloc(sizeof(*panel), GFP_KERNEL);
 	if (!panel)
@@ -4073,6 +4095,23 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 				"qcom,mdss-dsi-panel-name", NULL);
 	if (!panel->name)
 		panel->name = DSI_PANEL_DEFAULT_LABEL;
+
+	panel_model = utils->get_property(utils->data,
+				"qcom,mdss-dsi-panel-model", NULL);
+	if (panel_model) {
+		register_hw_component_info(HWCONPONENT_NAME);
+		add_hw_component_info(HWCONPONENT_NAME, HWCONPONENT_KEY_LCD, (char *)panel_model);
+	}
+
+	dispparam_enabled = utils->read_bool(utils->data,
+				"qcom,dispparam-enabled" );
+	if (dispparam_enabled){
+		pr_info("[LCD]%s:%d Dispparam enabled.\n", __func__, __LINE__);
+		panel->dispparam_enabled = true;
+	} else {
+		pr_info("[LCD]%s:%d Dispparam disabled.\n", __func__, __LINE__);
+		panel->dispparam_enabled = false;
+	}
 
 	/*
 	 * Set panel type to LCD as default.
@@ -4157,13 +4196,13 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
 	if (rc)
 		pr_debug("failed to parse esd config, rc=%d\n", rc);
 
-	panel->power_mode = SDE_MODE_DPMS_OFF;
-
 	rc = dsi_panel_parse_mi_config(panel, of_node);
 	if (rc)
 		pr_err("failed to parse mi config, rc=%d\n", rc);
 
 	g_panel = panel;
+
+	panel->power_mode = SDE_MODE_DPMS_OFF;
 
 	drm_panel_init(&panel->drm_panel);
 	mutex_init(&panel->panel_lock);

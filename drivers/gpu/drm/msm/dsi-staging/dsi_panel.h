@@ -254,6 +254,8 @@ struct dsi_panel {
 
 	u32 panel_on_dimming_delay;
 	struct delayed_work cmds_work;
+	struct delayed_work fod_work;
+	struct delayed_work esd_work;
 	struct delayed_work nolp_bl_delay_work;
 	u32 last_bl_lvl;
 	s32 backlight_delta;
@@ -273,6 +275,7 @@ struct dsi_panel {
 	bool fod_dimlayer_enabled;
 	bool fod_dimlayer_hbm_enabled;
 	u32 fod_ui_ready;
+	bool cphy_esd_check;
 	u32 doze_backlight_threshold;
 	u32 fod_off_dimming_delay;
 	ktime_t fod_backlight_off_time;
@@ -298,6 +301,7 @@ struct dsi_panel {
 	bool in_aod; /* set  DISPPARAM_DOZE_BRIGHTNESS_HBM/LBM only in AOD */
 	int doze_brightness;
 	bool is_tddi_flag;
+	bool tddi_doubleclick_flag;
 	bool panel_dead_flag;
 	bool panel_max_frame_rate;
 
@@ -305,6 +309,25 @@ struct dsi_panel {
 	bool oled_panel_video_mode;
 	int doze_lbm_brightness;
 	int doze_hbm_brightness;
+	
+	/* Display count */
+	bool panel_active_count_enable;
+	u64 boottime;
+	u64 bootRTCtime;
+	u64 bootdays;
+	u64 panel_active;
+	u64 kickoff_count;
+	u64 bl_duration;
+	u64 bl_level_integral;
+	u64 bl_highlevel_duration;
+	u64 bl_lowlevel_duration;
+	u64 hbm_duration;
+	u64 hbm_times;
+	bool dim_layer_replace_dc;
+	bool fod_dimlayer_bl_block;
+	bool fodflag;
+
+	struct dsi_read_config max_luminance_cmds;
 };
 
 static inline bool dsi_panel_ulps_feature_enabled(struct dsi_panel *panel)
