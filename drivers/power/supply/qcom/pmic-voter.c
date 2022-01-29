@@ -1,5 +1,5 @@
 /* Copyright (c) 2015-2017, 2019 The Linux Foundation. All rights reserved.
- * Copyright (C) 2019 XiaoMi, Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -502,6 +502,11 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 		}
 		votable->effective_client_id = effective_id;
 		votable->effective_result = effective_result;
+		pr_debug("%s: effective vote is now %d voted by %s,%d\n",
+			votable->name, effective_result,
+			get_client_str(votable, effective_id),
+			effective_id);
+
 		if (votable->callback && !votable->force_active
 				&& (votable->override_result == -EINVAL))
 			rc = votable->callback(votable, votable->data,
