@@ -943,8 +943,6 @@ static void core_ctl_call_notifier(void)
 
 	ndata.nr_big = last_nr_big;
 	walt_fill_ta_data(&ndata);
-	trace_core_ctl_notif_data(ndata.nr_big, ndata.coloc_load_pct,
-			ndata.ta_util_pct, ndata.cur_cap_pct);
 
 	atomic_notifier_call_chain(&core_ctl_notifier, 0, &ndata);
 }
