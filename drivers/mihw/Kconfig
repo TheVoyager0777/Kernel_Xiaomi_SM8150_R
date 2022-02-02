@@ -5,3 +5,7 @@ config MIGT
 	help
 	  Boost cpufreq when current frame drawing time too long
 
+config MILLET
+	bool "frozen framework"
+	---help---
+	  Mi frozen function
