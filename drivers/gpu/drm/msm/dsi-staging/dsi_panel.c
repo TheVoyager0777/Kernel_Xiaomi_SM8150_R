@@ -789,78 +789,62 @@ error:
 	return rc;
 }
 
-int dsi_panel_set_doze_backlight(struct dsi_display *display)
+int dsi_panel_set_doze_backlight(struct dsi_display *display, u32 bl_lvl)
 {
 	int rc = 0;
-	struct dsi_display *dsi_display = display;
 	struct dsi_panel *panel = NULL;
 	struct drm_device *drm_dev = NULL;
-	static int last_aod_hbm_status = DOZE_BRIGHTNESS_INVALID;
 
-	if (!dsi_display || !dsi_display->panel || !dsi_display->drm_dev) {
+	if (!display || !display->panel || !display->drm_dev) {
 		pr_err("invalid display/panel/drm_dev\n");
 		return -EINVAL;
 	}
-	panel = dsi_display->panel;
-	drm_dev = dsi_display->drm_dev;
+	panel = display->panel;
+	drm_dev = display->drm_dev;
 
-	mutex_lock(&panel->panel_lock);
-
-	if (!dsi_panel_initialized(panel)) {
-		pr_info("[%s] set doze backlight before panel initialized!\n", dsi_display->name);
-		goto error;
+	if (panel->fod_hbm_enabled || panel->fod_backlight_flag) {
+		pr_info("%s FOD HBM open, skip value:%u [hbm=%d][fod_bl=%d]\n", __func__,
+			bl_lvl, panel->fod_hbm_enabled, panel->fod_backlight_flag);
+		return rc;
 	}
 
-	pr_info("doze_state = %d, doze_brightness = %d\n", drm_dev->doze_state, drm_dev->doze_brightness);
-
-	if (drm_dev->doze_brightness == DOZE_BRIGHTNESS_TO_NORMAL) {
-		if (panel->oled_panel_video_mode) {
-			if ((last_aod_hbm_status == DOZE_BRIGHTNESS_LBM && panel->last_bl_lvl <= panel->doze_lbm_brightness)
-				||(last_aod_hbm_status == DOZE_BRIGHTNESS_HBM && panel->last_bl_lvl <= panel->doze_hbm_brightness))
-				schedule_delayed_work(&panel->nolp_bl_delay_work, msecs_to_jiffies(0));
-			else
-				schedule_delayed_work(&panel->nolp_bl_delay_work, msecs_to_jiffies(30));
-		}
+	if (bl_lvl > panel->doze_backlight_threshold) {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_HBM);
+		if (rc)
+			pr_err("[%s] failed to send DSI_CMD_SET_DOZE_HBM cmd, rc=%d\n",
+				   panel->name, rc);
+		drm_dev->doze_brightness = DOZE_BRIGHTNESS_HBM;
+		panel->in_aod = true;
+		panel->skip_dimmingon = STATE_DIM_BLOCK;
+	} else if (bl_lvl <= panel->doze_backlight_threshold && bl_lvl > 0) {
+		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_LBM);
+		if (rc)
+			pr_err("[%s] failed to send DSI_CMD_SET_DOZE_LBM cmd, rc=%d\n",
+			       panel->name, rc);
+		drm_dev->doze_brightness = DOZE_BRIGHTNESS_LBM;
+		panel->in_aod = true;
+		panel->skip_dimmingon = STATE_DIM_BLOCK;
+	} else {
 		drm_dev->doze_brightness = DOZE_BRIGHTNESS_INVALID;
 	}
-	if (drm_dev->doze_brightness == DOZE_BRIGHTNESS_LBM ||drm_dev->doze_brightness == DOZE_BRIGHTNESS_HBM)
-		last_aod_hbm_status  = drm_dev->doze_brightness;
 
-	if (drm_dev && ((panel->oled_panel_video_mode && drm_dev->doze_state == DRM_BLANK_UNBLANK)
-		||drm_dev->doze_state == DRM_BLANK_LP1 || drm_dev->doze_state == DRM_BLANK_LP2)) {
-		if (panel->fod_hbm_enabled || panel->fod_dimlayer_hbm_enabled || panel->fod_backlight_flag) {
-			pr_info("%s FOD HBM open, skip set doze backlight at: [hbm=%d][dimlayer_fod=%d][fod_bl=%d]\n", __func__,
-			panel->fod_hbm_enabled, panel->fod_dimlayer_hbm_enabled, panel->fod_backlight_flag);
-			goto error;
-		}
-		if (drm_dev->doze_brightness == DOZE_BRIGHTNESS_HBM) {
-			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_HBM);
-			if (rc)
-				pr_err("[%s] failed to send DSI_CMD_SET_DOZE_HBM cmd, rc=%d\n", panel->name, rc);
-			else
-				pr_info("In %s the doze_brightness value:%u\n", __func__, drm_dev->doze_brightness);
-			panel->in_aod = true;
-			panel->skip_dimmingon = STATE_DIM_BLOCK;
-		} else if (drm_dev->doze_brightness == DOZE_BRIGHTNESS_LBM) {
-			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_LBM);
-			if (rc)
-				pr_err("[%s] failed to send DSI_CMD_SET_DOZE_LBM cmd, rc=%d\n",
-				panel->name, rc);
-			else
-				pr_info("In %s the doze_brightness value:%u\n", __func__, drm_dev->doze_brightness);
-			panel->in_aod = true;
-			panel->skip_dimmingon = STATE_DIM_BLOCK;
-		} else {
-			drm_dev->doze_brightness = DOZE_BRIGHTNESS_INVALID;
-			pr_info("In %s the doze_brightness value:%u\n", __func__, drm_dev->doze_brightness);
-		}
+	pr_info("%s value:%u\n", __func__, drm_dev->doze_brightness);
+	return rc;
+}
+
+int dsi_panel_enable_doze_backlight(struct dsi_panel *panel, u32 bl_lvl)
+{
+	int rc = 0;
+	struct dsi_backlight_config *bl = &panel->bl_config;
+
+	if (panel->fod_backlight_flag) {
+		pr_info("fod_backlight_flag set\n");
+	} else {
+		pr_debug("enable doze backlight type:%d lvl:%d\n", bl->type, bl_lvl);
+		rc = dsi_panel_update_backlight(panel, bl_lvl);
 	}
 
-	panel->doze_brightness = drm_dev->doze_brightness;
-
-error:
-	mutex_unlock(&panel->panel_lock);
-
+	panel->last_bl_lvl = bl_lvl;
 	return rc;
 }
 
@@ -5662,23 +5646,11 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 		break;
 	case DISPPARAM_HBM_FOD_OFF:
 		pr_info("hbm fod off\n");
-		if (panel->f4_51_ctrl_flag) {
-			cmds = priv_info->cmd_sets[DSI_CMD_SET_DISP_HBM_FOD_OFF].cmds;
-			count = priv_info->cmd_sets[DSI_CMD_SET_DISP_HBM_FOD_OFF].count;
-			if (cmds && count >= panel->fod_off_51_index) {
-				tx_buf = (u8 *)cmds[panel->fod_off_51_index].msg.tx_buf;
-				tx_buf[1] = (panel->last_bl_lvl >> 8) & 0x07;
-				tx_buf[2] = panel->last_bl_lvl & 0xff;
-			}
-			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_HBM_FOD_OFF);
+		if (panel->elvss_dimming_check_enable) {
+			rc = dsi_display_write_panel(panel, &panel->hbm_fod_off);
 		} else {
-			if (panel->elvss_dimming_check_enable) {
-				rc = dsi_display_write_panel(panel, &panel->hbm_fod_off);
-			} else {
-				rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_HBM_FOD_OFF);
-			}
+			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_HBM_FOD_OFF);
 		}
-
 		panel->skip_dimmingon = STATE_DIM_RESTORE;
 		panel->fod_hbm_enabled = false;
 		panel->fod_hbm_off_time = ktime_add_ms(ktime_get(), panel->fod_off_dimming_delay);
@@ -5689,10 +5661,8 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 			if (host)
 				display = container_of(host, struct dsi_display, host);
 
-			if (display->drm_dev
-				&& ((display->drm_dev->doze_state == DRM_BLANK_LP1)
-					|| (display->drm_dev->doze_state == DRM_BLANK_LP2))) {
-#if 0
+			if ((display->drm_dev && display->drm_dev->doze_state == DRM_BLANK_LP1) ||
+				(display->drm_dev && display->drm_dev->doze_state == DRM_BLANK_LP2)) {
 				if (panel->last_bl_lvl > panel->doze_backlight_threshold) {
 					pr_info("hbm fod off DSI_CMD_SET_DOZE_HBM");
 					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_HBM);
@@ -5715,7 +5685,6 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 					pr_info("hbm fod off DOZE_BRIGHTNESS_INVALID");
 					display->drm_dev->doze_brightness = DOZE_BRIGHTNESS_INVALID;
 				}
-#else
 				pr_info("HBM_FOD_OFF DSI_CMD_SET_DOZE_HBM");
 				rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_HBM);
 				if (rc)
@@ -5724,7 +5693,6 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 				display->drm_dev->doze_brightness = DOZE_BRIGHTNESS_HBM;
 				panel->in_aod = true;
 				panel->skip_dimmingon = STATE_DIM_BLOCK;
-#endif
 			}
 		}
 		break;
@@ -5848,15 +5816,7 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 		break;
 	case DISPPARAM_FOD_BACKLIGHT:
 		pr_info("FOD backlight");
-		if (strnstr(panel->name, "ea8076", 20)) {
-			pr_info("FOD ea8076\n");
-		} else if (strnstr(panel->name, "r66456", 20)) {
-			pr_info("FOD r66456\n");
-			if (fod_backlight == 0x690)
-				fod_backlight = 4090;
-			else if (fod_backlight == 0x7FF)
-				fod_backlight = 4090;
-		}
+		fod_backlight = 4090;
 		if (fod_backlight == 0x1000) {
 			struct dsi_display *display = NULL;
 			struct mipi_dsi_host *host = panel->host;
@@ -5868,10 +5828,8 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_DIMMINGOFF);
 			rc = dsi_panel_update_backlight(panel, panel->last_bl_lvl);
 
-			if (display->drm_dev
-				&& ((display->drm_dev->doze_state == DRM_BLANK_LP1)
-					|| (display->drm_dev->doze_state == DRM_BLANK_LP2))) {
-#if 0
+			if ((display->drm_dev && display->drm_dev->doze_state == DRM_BLANK_LP1) ||
+				(display->drm_dev && display->drm_dev->doze_state == DRM_BLANK_LP2)) {
 				if (panel->last_bl_lvl > panel->doze_backlight_threshold) {
 					pr_info("FOD backlight restore DSI_CMD_SET_DOZE_HBM");
 					rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_HBM);
@@ -5894,7 +5852,6 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 					pr_info("FOD backlight restore DOZE_BRIGHTNESS_INVALID");
 					display->drm_dev->doze_brightness = DOZE_BRIGHTNESS_INVALID;
 				}
-#else
 				pr_info("FOD backlight restore DSI_CMD_SET_DOZE_HBM");
 				rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DOZE_HBM);
 				if (rc)
@@ -5903,14 +5860,12 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 				display->drm_dev->doze_brightness = DOZE_BRIGHTNESS_HBM;
 				panel->in_aod = true;
 				panel->skip_dimmingon = STATE_DIM_BLOCK;
-#endif
-
 			} else {
 				panel->skip_dimmingon = STATE_DIM_RESTORE;
 				panel->fod_backlight_off_time = ktime_add_ms(ktime_get(), panel->fod_off_dimming_delay);
 			}
 		} else if (fod_backlight >= 0) {
-			pr_info("FOD backlight set fod_backlight %d", fod_backlight);
+			pr_info("FOD backlight set");
 			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_DIMMINGOFF);
 			rc = dsi_panel_update_backlight(panel, fod_backlight);
 			panel->fod_target_backlight = fod_backlight;
