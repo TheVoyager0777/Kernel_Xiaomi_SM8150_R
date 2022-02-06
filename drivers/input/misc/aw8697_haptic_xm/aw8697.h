@@ -324,7 +324,7 @@ struct aw8697 {
 	struct fileops fileops;
 	struct ram ram;
 
-	struct timespec64 start, end;
+	struct timeval start, end;
 	unsigned int timeval_flags;
 	unsigned int osc_cali_flag;
 	unsigned long int microsecond;
@@ -345,7 +345,6 @@ struct aw8697 {
 	unsigned char activate_mode;
 
 	unsigned char auto_boost;
-	unsigned char wk_lock_flag;
 
 	int state;
 	int duration;
@@ -370,7 +369,6 @@ struct aw8697 {
 	unsigned char max_pos_beme;
 	unsigned char max_neg_beme;
 	unsigned char f0_cali_flag;
-	bool f0_cali_status;
 	unsigned int osc_cali_run;
 
 	unsigned char ram_vbat_comp;
