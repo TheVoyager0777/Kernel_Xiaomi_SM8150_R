@@ -47,6 +47,7 @@
 #include <linux/utsname.h>
 #include <linux/pid_namespace.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/namei.h>
 #include <linux/mount.h>
 #include <linux/security.h>
@@ -1724,6 +1725,8 @@ static int do_execveat_common(int fd, struct filename *filename,
 			      struct user_arg_ptr envp,
 			      int flags)
 {
+        static bool enabled __read_mostly = true;
+        module_param(game_mode, bool, 0644);
 	char *pathbuf = NULL;
 	struct linux_binprm *bprm;
 	struct file *file;
