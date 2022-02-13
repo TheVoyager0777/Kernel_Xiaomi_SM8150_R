@@ -285,6 +285,10 @@ config DECOMPRESS_LZ4
 	select LZ4_DECOMPRESS
 	tristate
 
+config DECOMPRESS_ZSTD
+	select ZSTD_DECOMPRESS
+	tristate
+
 #
 # Generic allocator support is selected if needed
 #
@@ -598,5 +602,10 @@ config PRIME_NUMBERS
 
 config STRING_SELFTEST
 	bool "Test string functions"
+
+config CJSON
+	bool "Lightweight JSON in ANSI C"
+	help
+	  Kernel config option to enable cJSON library
 
 endmenu
