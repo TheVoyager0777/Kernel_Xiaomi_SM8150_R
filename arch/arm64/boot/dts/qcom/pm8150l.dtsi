@@ -56,28 +56,14 @@
 		};
 
 		pm8150l_gpios: pinctrl@c000 {
-			compatible = "qcom,spmi-gpio";
-			reg = <0xc000 0xc00>;
-			interrupts = <0x4 0xc0 0 IRQ_TYPE_NONE>,
-					<0x4 0xc1 0 IRQ_TYPE_NONE>,
-					<0x4 0xc2 0 IRQ_TYPE_NONE>,
-					<0x4 0xc3 0 IRQ_TYPE_NONE>,
-					<0x4 0xc4 0 IRQ_TYPE_NONE>,
-					<0x4 0xc5 0 IRQ_TYPE_NONE>,
-					<0x4 0xc7 0 IRQ_TYPE_NONE>,
-					<0x4 0xc8 0 IRQ_TYPE_NONE>,
-					<0x4 0xc9 0 IRQ_TYPE_NONE>,
-					<0x4 0xca 0 IRQ_TYPE_NONE>,
-					<0x4 0xcb 0 IRQ_TYPE_NONE>;
-			interrupt-names = "pm8150l_gpio1", "pm8150l_gpio2",
-					"pm8150l_gpio3", "pm8150l_gpio4",
-					"pm8150l_gpio5", "pm8150l_gpio6",
-					"pm8150l_gpio8", "pm8150l_gpio9",
-					"pm8150l_gpio10", "pm8150l_gpio11",
-					"pm8150l_gpio12";
-			gpio-controller;
-			#gpio-cells = <2>;
-			qcom,gpios-disallowed = <7>;
+					compatible = "qcom,spmi-gpio";
+					reg = <0xc000 0xc00>;
+					interrupts = <0x04 0xc0 0x00 0x00 0x04 0xc1 0x00 0x00 0x04 0xc2 0x00 0x00 0x04 0xc3 0x00 0x00 0x04 0xc4 0x00 0x00 0x04 0xc5 0x00 0x00 0x04 0xc7 0x00 0x00 0x04 0xc8 0x00 0x00 0x04 0xc9 0x00 0x00 0x04 0xca 0x00 0x00 0x04 0xcb 0x00 0x00>;
+					interrupt-names = "pm8150l_gpio1\0pm8150l_gpio2\0pm8150l_gpio3\0pm8150l_gpio4\0pm8150l_gpio5\0pm8150l_gpio6\0pm8150l_gpio8\0pm8150l_gpio9\0pm8150l_gpio10\0pm8150l_gpio11\0pm8150l_gpio12";
+					gpio-controller;
+					#gpio-cells = <0x02>;
+					qcom,gpios-disallowed = <0x07>;
+					phandle = <0xf9>;
 		};
 
 		pm8150l_vadc: vadc@3100 {
@@ -124,17 +110,34 @@
 		};
 
 		pm8150l_adc_tm: adc_tm@3500 {
-			compatible = "qcom,adc-tm5";
-			reg = <0x3500 0x100>;
-			interrupts = <0x4 0x35 0x0 IRQ_TYPE_EDGE_RISING>;
-			interrupt-names = "thr-int-en";
-			#address-cells = <1>;
-			#size-cells = <0>;
-			#thermal-sensor-cells = <1>;
-			io-channels = <&pm8150l_vadc ADC_AMUX_THM1_PU2>,
-					<&pm8150l_vadc ADC_AMUX_THM2_PU2>,
-					<&pm8150l_vadc ADC_AMUX_THM3_PU2>;
-		};
+					compatible = "qcom,adc-tm5";
+					reg = <0x3500 0x100>;
+					interrupts = <0x00 0x35 0x00 0x01>;
+					interrupt-names = "thr-int-en";
+					#address-cells = <0x01>;
+					#size-cells = <0x00>;
+					#thermal-sensor-cells = <0x01>;
+					io-channels = <0x01 0x4c 0x01 0x4d 0x01 0x4e>;
+					phandle = <0xb7>;
+
+					xo_therm {
+						reg = <0x4c>;
+						qcom,ratiometric;
+						qcom,hw-settle-time = <0xc8>;
+					};
+
+					quiet_therm {
+						reg = <0x4d>;
+						qcom,ratiometric;
+						qcom,hw-settle-time = <0xc8>;
+					};
+
+					pa_therm0 {
+						reg = <0x4e>;
+						qcom,ratiometric;
+						qcom,hw-settle-time = <0xc8>;
+					};
+				};
 	};
 
 	qcom,pm8150l@5 {
