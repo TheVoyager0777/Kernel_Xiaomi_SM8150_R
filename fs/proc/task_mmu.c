@@ -15,6 +15,7 @@
 #include <linux/sched/mm.h>
 #include <linux/swapops.h>
 #include <linux/mmu_notifier.h>
+#include <linux/mm_inline.h>
 #include <linux/page_idle.h>
 #include <linux/shmem_fs.h>
 #include <linux/uaccess.h>
