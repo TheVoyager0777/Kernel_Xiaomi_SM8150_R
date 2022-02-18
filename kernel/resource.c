@@ -358,17 +358,15 @@ EXPORT_SYMBOL(release_resource);
  * This function walks the whole tree and not just first level children until
  * and unless first_level_children_only is true.
  */
-static int find_next_iomem_res(struct resource *res, unsigned long desc,
-			       bool first_level_children_only)
+static int find_next_iomem_res(resource_size_t start, resource_size_t end,
+			       unsigned long flags, unsigned long desc,
+			       bool first_level_children_only,
+			       struct resource *res)
 {
-	resource_size_t start, end;
 	struct resource *p;
 	bool sibling_only = false;
 
 	BUG_ON(!res);
-
-	start = res->start;
-	end = res->end;
 	BUG_ON(start >= end);
 
 	if (first_level_children_only)
@@ -377,7 +375,7 @@ static int find_next_iomem_res(struct resource *res, unsigned long desc,
 	read_lock(&resource_lock);
 
 	for (p = iomem_resource.child; p; p = next_resource(p, sibling_only)) {
-		if ((p->flags & res->flags) != res->flags)
+		if ((p->flags & flags) != flags)
 			continue;
 		if ((desc != IORES_DESC_NONE) && (desc != p->desc))
 			continue;
@@ -385,19 +383,41 @@ static int find_next_iomem_res(struct resource *res, unsigned long desc,
 			p = NULL;
 			break;
 		}
-		if ((p->end >= start) && (p->start < end))
+		if ((p->end >= start) && (p->start <= end))
 			break;
 	}
 
+	if (p) {
+		/* copy data */
+		res->start = max(start, p->start);
+		res->end = min(end, p->end);
+		res->flags = p->flags;
+		res->desc = p->desc;
+	}
+
 	read_unlock(&resource_lock);
-	if (!p)
-		return -1;
-	/* copy data */
-	if (res->start < p->start)
-		res->start = p->start;
-	if (res->end > p->end)
-		res->end = p->end;
-	return 0;
+	return p ? 0 : -ENODEV;
+}
+
+static int __walk_iomem_res_desc(resource_size_t start, resource_size_t end,
+				 unsigned long flags, unsigned long desc,
+				 bool first_level_children_only, void *arg,
+				 int (*func)(struct resource *, void *))
+{
+	struct resource res;
+	int ret = -1;
+
+	while (start < end &&
+	       !find_next_iomem_res(start, end, flags, desc,
+				    first_level_children_only, &res)) {
+		ret = (*func)(&res, arg);
+		if (ret)
+			break;
+
+		start = res.end + 1;
+	}
+
+	return ret;
 }
 
 /*
@@ -415,30 +435,11 @@ static int find_next_iomem_res(struct resource *res, unsigned long desc,
  * <linux/ioport.h> and set it in 'desc' of a target resource entry.
  */
 int walk_iomem_res_desc(unsigned long desc, unsigned long flags, u64 start,
-		u64 end, void *arg, int (*func)(u64, u64, void *))
+		u64 end, void *arg, int (*func)(struct resource *, void *))
 {
-	struct resource res;
-	u64 orig_end;
-	int ret = -1;
-
-	res.start = start;
-	res.end = end;
-	res.flags = flags;
-	orig_end = res.end;
-
-	while ((res.start < res.end) &&
-		(!find_next_iomem_res(&res, desc, false))) {
-
-		ret = (*func)(res.start, res.end, arg);
-		if (ret)
-			break;
-
-		res.start = res.end + 1;
-		res.end = orig_end;
-	}
-
-	return ret;
+	return __walk_iomem_res_desc(start, end, flags, desc, false, arg, func);
 }
+EXPORT_SYMBOL_GPL(walk_iomem_res_desc);
 
 /*
  * This function calls the @func callback against all memory ranges of type
@@ -448,25 +449,12 @@ int walk_iomem_res_desc(unsigned long desc, unsigned long flags, u64 start,
  * ranges.
  */
 int walk_system_ram_res(u64 start, u64 end, void *arg,
-				int (*func)(u64, u64, void *))
+				int (*func)(struct resource *, void *))
 {
-	struct resource res;
-	u64 orig_end;
-	int ret = -1;
+	unsigned long flags = IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY;
 
-	res.start = start;
-	res.end = end;
-	res.flags = IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY;
-	orig_end = res.end;
-	while ((res.start < res.end) &&
-		(!find_next_iomem_res(&res, IORES_DESC_NONE, true))) {
-		ret = (*func)(res.start, res.end, arg);
-		if (ret)
-			break;
-		res.start = res.end + 1;
-		res.end = orig_end;
-	}
-	return ret;
+	return __walk_iomem_res_desc(start, end, flags, IORES_DESC_NONE, true,
+				     arg, func);
 }
 
 #if !defined(CONFIG_ARCH_HAS_WALK_MEMORY)
@@ -479,25 +467,25 @@ int walk_system_ram_res(u64 start, u64 end, void *arg,
 int walk_system_ram_range(unsigned long start_pfn, unsigned long nr_pages,
 		void *arg, int (*func)(unsigned long, unsigned long, void *))
 {
+	resource_size_t start, end;
+	unsigned long flags;
 	struct resource res;
 	unsigned long pfn, end_pfn;
-	u64 orig_end;
 	int ret = -1;
 
-	res.start = (u64) start_pfn << PAGE_SHIFT;
-	res.end = ((u64)(start_pfn + nr_pages) << PAGE_SHIFT) - 1;
-	res.flags = IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY;
-	orig_end = res.end;
-	while ((res.start < res.end) &&
-		(find_next_iomem_res(&res, IORES_DESC_NONE, true) >= 0)) {
+	start = (u64) start_pfn << PAGE_SHIFT;
+	end = ((u64)(start_pfn + nr_pages) << PAGE_SHIFT) - 1;
+	flags = IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY;
+	while (start < end &&
+	       !find_next_iomem_res(start, end, flags, IORES_DESC_NONE,
+				    true, &res)) {
 		pfn = (res.start + PAGE_SIZE - 1) >> PAGE_SHIFT;
 		end_pfn = (res.end + 1) >> PAGE_SHIFT;
 		if (end_pfn > pfn)
 			ret = (*func)(pfn, end_pfn - pfn, arg);
 		if (ret)
 			break;
-		res.start = res.end + 1;
-		res.end = orig_end;
+		start = res.end + 1;
 	}
 	return ret;
 }
