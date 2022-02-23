@@ -2039,6 +2039,56 @@ static int smb5_get_prop_wirless_type(struct smb_charger *chg,
 	return 1;
 }
 
+/*set mode of DIV 2*/
+static int smb5_set_prop_div2_mode(struct smb_charger *chg,
+				const union power_supply_propval *val)
+{
+	int rc;
+
+	dev_info(chg->dev, "%s: set mode is = %d\n",
+				__func__, val->intval);
+
+	chg->ln_psy = power_supply_get_by_name("lionsemi");
+	chg->halo_psy = power_supply_get_by_name("halo");
+	if (chg->ln_psy)
+		chg->cp_chip_psy = chg->ln_psy;
+	else if (chg->halo_psy)
+		chg->cp_chip_psy = chg->halo_psy;
+	else
+		return -EINVAL;
+
+	if (chg->cp_chip_psy)
+		rc = power_supply_set_property(chg->cp_chip_psy,
+				POWER_SUPPLY_PROP_DIV_2_MODE, val);
+
+	return rc;
+}
+
+static int smb5_get_prop_div2_mode(struct smb_charger *chg,
+				union power_supply_propval *val)
+{
+	dev_info(chg->dev, "%s: get div2 mode\n", __func__);
+
+	chg->ln_psy = power_supply_get_by_name("lionsemi");
+	chg->halo_psy = power_supply_get_by_name("halo");
+
+	if (chg->ln_psy)
+		chg->cp_chip_psy = chg->ln_psy;
+	else if (chg->halo_psy)
+		chg->cp_chip_psy = chg->halo_psy;
+	else
+		return -EINVAL;
+
+	if (chg->cp_chip_psy) {
+		power_supply_get_property(chg->cp_chip_psy,
+			POWER_SUPPLY_PROP_DIV_2_MODE, val);
+		dev_info(chg->dev, "%s: get mode is = %d\n",
+				__func__, val->intval);
+	}
+
+	return 1;
+}
+
 /*************************
  * WIRELESS PSY REGISTRATION *
  *************************/
@@ -2077,6 +2127,9 @@ static int smb5_wireless_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_WIRELESS_POWER_GOOD_EN:
 		smblib_set_wirless_power_good_enable(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_DIV_2_MODE:
+		rc = smb5_set_prop_div2_mode(chg, val);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2114,6 +2167,9 @@ static int smb5_wireless_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TX_ADAPTER:
 		smb5_get_prop_wirless_type(chg, val);
 		break;
+	case POWER_SUPPLY_PROP_DIV_2_MODE:
+		smb5_get_prop_div2_mode(chg, val);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -2133,6 +2189,7 @@ static int smb5_wireless_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION:
 	case POWER_SUPPLY_PROP_WIRELESS_CP_EN:
 	case POWER_SUPPLY_PROP_WIRELESS_POWER_GOOD_EN:
+	case POWER_SUPPLY_PROP_DIV_2_MODE:
 		return 1;
 	default:
 		break;
