@@ -1,4 +1,5 @@
 /* Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2019 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -2088,7 +2089,24 @@ static struct platform_driver qti_haptics_driver = {
 	.remove		= qti_haptics_remove,
 	.shutdown	= qti_haptics_shutdown,
 };
-module_platform_driver(qti_haptics_driver);
+
+static int __init qti_haptics_init(void)
+{
+	int error = 0;
+	error = platform_driver_register(&qti_haptics_driver);
+	if (error) {
+		pr_err("Failed to register platform driver: %d\n", error);
+	}
+	return error;
+}
+
+static void __exit qti_haptics_exit(void)
+{
+	platform_driver_unregister(&qti_haptics_driver);
+}
+
+late_initcall(qti_haptics_init);
+module_exit(qti_haptics_exit);
 
 MODULE_DESCRIPTION("QTI haptics driver");
 MODULE_LICENSE("GPL v2");

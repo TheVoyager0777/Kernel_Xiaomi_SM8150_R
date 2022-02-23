@@ -1,4 +1,4 @@
-config FINGERPRINT_GOODIX_TA
+config FINGERPRINT_GOODIX_TA_CRUX
 	tristate "Finger print card goodix"
 	depends on INPUT_FINGERPRINT
 	help
