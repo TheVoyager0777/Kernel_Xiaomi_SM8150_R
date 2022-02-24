@@ -22,6 +22,10 @@ struct charger_param {
 	u32 qc4_max_icl_ua;
 };
 
+#ifndef CONFIG_QPNP_SMB5_CRUX
 int qcom_batt_init(struct charger_param *param);
+#else
+int qcom_batt_init(int smb_version);
+#endif
 void qcom_batt_deinit(void);
 #endif /* __BATTERY_H */
