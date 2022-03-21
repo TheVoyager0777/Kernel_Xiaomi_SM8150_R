@@ -154,8 +154,8 @@ enum {
 
 
 enum bq_fg_device {
-	BQ27Z561,
-	BQ28Z610 = 0,
+	BQ27Z561 = 0,
+	BQ28Z610,
 };
 
 static const unsigned char *device2str[] = {

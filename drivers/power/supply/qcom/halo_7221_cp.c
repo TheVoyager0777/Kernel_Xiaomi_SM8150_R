@@ -71,7 +71,6 @@ typedef union{
 */
 
 extern char *saved_command_line;
-/*
 static int get_board_version(void)
 {
 	char boot[5] = {'\0'};
@@ -87,7 +86,6 @@ static int get_board_version(void)
 	}
 	return 0;
 }
-*/
 
 int halo7221_read(struct halo7221_dev *chip, u16 reg, u8 *val)
 {
@@ -175,9 +173,9 @@ static int halo7221_hw_init(struct halo7221_dev *chip)
 	msleep(200);
 	rc = chip->bus.write(chip, 0x61, 0x00);
 	msleep(200);
-	rc = chip->bus.write_masked(chip, 0x03, GENMASK(1, 0), 0x01);
+	rc = chip->bus.write_masked(chip, 0x03, GENMASK(1, 0), 0x01); // set 11v to enable cp mode
 	msleep(50);
-	rc = chip->bus.write_masked(chip, 0x01, GENMASK(7, 3), 0x1A);
+	rc = chip->bus.write_masked(chip, 0x01, GENMASK(7, 3), 0x1A); // Iin_Limit 1500mA
 
 	return rc;
 }
@@ -510,7 +508,7 @@ static int halo_get_mode(struct halo7221_dev *chip)
 		ret = val & BIT(5);
 	}
 	if (ret == 0)
-		ret = 2;
+		ret = 2; // return switching mode
 
 	dev_info(chip->dev, "get opmode is: %d\n", ret);
 
@@ -529,7 +527,7 @@ static int halo_set_mode(struct halo7221_dev *chip, int mode)
 		rc = chip->bus.write(chip, 0x07, 0x78);
 		rc = chip->bus.write(chip, 0xA7, 0xf9);
 		rc = chip->bus.write(chip, 0x0A, 0x10);
-		rc = chip->bus.write(chip, 0x02, 0xa8);
+		rc = chip->bus.write(chip, 0x02, 0xa8); //set ilim to 1500mA
 		rc = chip->bus.write(chip, 0x05, 0x61);
 		rc = chip->bus.write(chip, 0x03, 0x53);
 		break;
@@ -538,7 +536,7 @@ static int halo_set_mode(struct halo7221_dev *chip, int mode)
 		rc = chip->bus.write(chip, 0x07, 0x78);
 		rc = chip->bus.write(chip, 0xA7, 0xf9);
 		rc = chip->bus.write(chip, 0x0A, 0x10);
-		rc = chip->bus.write(chip, 0x02, 0xa9);
+		rc = chip->bus.write(chip, 0x02, 0xa9); //set ilim to 1500mA
 		rc = chip->bus.write(chip, 0x05, 0x61);
 		rc = chip->bus.write(chip, 0x03, 0x53);
 		break;
@@ -626,7 +624,7 @@ static int halo7221_probe(struct i2c_client *client, const struct i2c_device_id 
 	struct halo7221_dev *chip;
 	int rc = 0, ret = 0;
 	struct power_supply_config halo_cfg = {};
-
+	//vuc chipid;
 
 	dev_info(&client->dev, "halo7221 probe!\n");
 
@@ -723,13 +721,11 @@ static struct i2c_driver halo7221_driver = {
 static int __init halo7221_init(void)
 {
 	int ret;
-/*
 	int drv_load = 0;
 
 	drv_load = get_board_version();
 	if (!drv_load)
 		return 0;
-*/
 
 	ret = i2c_add_driver(&halo7221_driver);
 	if (ret)

@@ -586,7 +586,6 @@ struct smb_charger {
 	int			*pd_disabled;
 	enum smb_mode		mode;
 	struct smb_chg_freq	chg_freq;
-	int			smb_version;
 	int			otg_delay_ms;
 	int			*weak_chg_icl_ua;
 	bool			pd_not_supported;
@@ -1153,9 +1152,7 @@ int smblib_set_prop_rechg_vbat_thresh(struct smb_charger *chg,
 				const union power_supply_propval *val);
 void smblib_suspend_on_debug_battery(struct smb_charger *chg);
 int smblib_rerun_apsd_if_required(struct smb_charger *chg);
-#ifdef CONFIG_QPNP_SMB5
 void smblib_rerun_apsd(struct smb_charger *chg);
-#endif
 int smblib_get_prop_fcc_delta(struct smb_charger *chg,
 				union power_supply_propval *val);
 int smblib_get_thermal_threshold(struct smb_charger *chg, u16 addr, int *val);
@@ -1220,9 +1217,7 @@ int smblib_toggle_smb_en(struct smb_charger *chg, int toggle);
 void smblib_hvdcp_detect_enable(struct smb_charger *chg, bool enable);
 void smblib_hvdcp_exit_config(struct smb_charger *chg);
 void smblib_apsd_enable(struct smb_charger *chg, bool enable);
-#ifdef CONFIG_QPNP_SMB5
 int smblib_force_vbus_voltage(struct smb_charger *chg, u8 val);
-#endif
 int smblib_get_irq_status(struct smb_charger *chg,
 		union power_supply_propval *val);
 #ifdef CONFIG_QPNP_SMB5_VAYU
@@ -1240,8 +1235,6 @@ int smblib_get_prop_battery_bq_input_suspend(struct smb_charger *chg,
 					union power_supply_propval *val);
 
 int smblib_get_qc3_main_icl_offset(struct smb_charger *chg, int *offset_ua);
-int smblib_get_prop_battery_charging_enabled(struct smb_charger *chg,
-				union power_supply_propval *val);
 struct usbpd *smb_get_usbpd(void);
 
 int smblib_init(struct smb_charger *chg);
