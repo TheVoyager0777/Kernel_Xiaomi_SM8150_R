@@ -1,4 +1,5 @@
 /* Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -29,23 +30,6 @@
 #include "smb5-reg.h"
 #include "smb5-lib.h"
 #include "schgm-flash.h"
-
-#undef dev_info
-#define dev_info(x, ...)
-#undef dev_dbg
-#define dev_dbg(x, ...)
-#undef dev_err
-#define dev_err(x, ...)
-#undef pr_info
-#define pr_info(x, ...)
-#undef pr_debug
-#define pr_debug(x, ...)
-#undef pr_error
-#define pr_error(x, ...)
-#undef printk
-#define printk(x, ...)
-#undef printk_deferred
-#define printk_deferred(x, ...)
 
 static struct smb_params smb5_pmi632_params = {
 	.fcc			= {
@@ -497,7 +481,6 @@ static int smb5_parse_dt(struct smb5 *chip)
 
 	chg->lpd_disabled = chg->lpd_disabled ||
 			of_property_read_bool(node, "qcom,lpd-disable");
-
 	chg->lpd_enabled = of_property_read_bool(node,
 				"qcom,lpd-enable");
 
@@ -1075,6 +1058,7 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_QUICK_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_PD_CURRENT_MAX,
 	POWER_SUPPLY_PROP_CURRENT_MAX,
 	POWER_SUPPLY_PROP_TYPE,
@@ -1092,7 +1076,6 @@ static enum power_supply_property smb5_usb_props[] = {
 	POWER_SUPPLY_PROP_HW_CURRENT_MAX,
 	POWER_SUPPLY_PROP_REAL_TYPE,
 	POWER_SUPPLY_PROP_HVDCP3_TYPE,
-	POWER_SUPPLY_PROP_QUICK_CHARGE_TYPE,
 	POWER_SUPPLY_PROP_PR_SWAP,
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_PD_VOLTAGE_MIN,
@@ -1169,7 +1152,7 @@ static int smb5_usb_get_prop(struct power_supply *psy,
 		val->intval = get_client_vote(chg->usb_icl_votable, PD_VOTER);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		val->intval = get_effective_result(chg->usb_icl_votable);
+		rc = smblib_get_prop_input_current_max(chg, val);
 		break;
 	case POWER_SUPPLY_PROP_TYPE:
 		val->intval = POWER_SUPPLY_TYPE_USB_PD;
@@ -1644,9 +1627,7 @@ static int smb5_usb_main_get_prop(struct power_supply *psy,
 		val->intval = chg->flash_active;
 		break;
 	case POWER_SUPPLY_PROP_FLASH_TRIGGER:
-		val->intval = 0;
-		if (chg->chg_param.smb_version == PMI632_SUBTYPE)
-			rc = schgm_flash_get_vreg_ok(chg, &val->intval);
+		rc = schgm_flash_get_vreg_ok(chg, &val->intval);
 		break;
 	case POWER_SUPPLY_PROP_TOGGLE_STAT:
 		val->intval = 0;
@@ -2039,56 +2020,6 @@ static int smb5_get_prop_wirless_type(struct smb_charger *chg,
 	return 1;
 }
 
-/*set mode of DIV 2*/
-static int smb5_set_prop_div2_mode(struct smb_charger *chg,
-				const union power_supply_propval *val)
-{
-	int rc;
-
-	dev_info(chg->dev, "%s: set mode is = %d\n",
-				__func__, val->intval);
-
-	chg->ln_psy = power_supply_get_by_name("lionsemi");
-	chg->halo_psy = power_supply_get_by_name("halo");
-	if (chg->ln_psy)
-		chg->cp_chip_psy = chg->ln_psy;
-	else if (chg->halo_psy)
-		chg->cp_chip_psy = chg->halo_psy;
-	else
-		return -EINVAL;
-
-	if (chg->cp_chip_psy)
-		rc = power_supply_set_property(chg->cp_chip_psy,
-				POWER_SUPPLY_PROP_DIV_2_MODE, val);
-
-	return rc;
-}
-
-static int smb5_get_prop_div2_mode(struct smb_charger *chg,
-				union power_supply_propval *val)
-{
-	dev_info(chg->dev, "%s: get div2 mode\n", __func__);
-
-	chg->ln_psy = power_supply_get_by_name("lionsemi");
-	chg->halo_psy = power_supply_get_by_name("halo");
-
-	if (chg->ln_psy)
-		chg->cp_chip_psy = chg->ln_psy;
-	else if (chg->halo_psy)
-		chg->cp_chip_psy = chg->halo_psy;
-	else
-		return -EINVAL;
-
-	if (chg->cp_chip_psy) {
-		power_supply_get_property(chg->cp_chip_psy,
-			POWER_SUPPLY_PROP_DIV_2_MODE, val);
-		dev_info(chg->dev, "%s: get mode is = %d\n",
-				__func__, val->intval);
-	}
-
-	return 1;
-}
-
 /*************************
  * WIRELESS PSY REGISTRATION *
  *************************/
@@ -2127,9 +2058,6 @@ static int smb5_wireless_set_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_WIRELESS_POWER_GOOD_EN:
 		smblib_set_wirless_power_good_enable(chg, val);
 		break;
-	case POWER_SUPPLY_PROP_DIV_2_MODE:
-		rc = smb5_set_prop_div2_mode(chg, val);
-		break;
 	default:
 		return -EINVAL;
 	}
@@ -2167,9 +2095,6 @@ static int smb5_wireless_get_prop(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TX_ADAPTER:
 		smb5_get_prop_wirless_type(chg, val);
 		break;
-	case POWER_SUPPLY_PROP_DIV_2_MODE:
-		smb5_get_prop_div2_mode(chg, val);
-		break;
 	default:
 		return -EINVAL;
 	}
@@ -2189,7 +2114,6 @@ static int smb5_wireless_prop_is_writeable(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_INPUT_VOLTAGE_REGULATION:
 	case POWER_SUPPLY_PROP_WIRELESS_CP_EN:
 	case POWER_SUPPLY_PROP_WIRELESS_POWER_GOOD_EN:
-	case POWER_SUPPLY_PROP_DIV_2_MODE:
 		return 1;
 	default:
 		break;
@@ -3405,9 +3329,8 @@ static int smb5_init_hw(struct smb5 *chip)
 	 */
 	if (chg->chg_param.smb_version == PMI632_SUBTYPE) {
 		schgm_flash_init(chg);
+		smblib_rerun_apsd_if_required(chg);
 	}
-
-	smblib_rerun_apsd_if_required(chg);
 
 	/* Use ICL results from HW */
 	rc = smblib_icl_override(chg, HW_AUTO_MODE);

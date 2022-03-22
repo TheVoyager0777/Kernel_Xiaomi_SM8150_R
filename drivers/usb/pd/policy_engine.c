@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,23 +29,6 @@
 #include <linux/usb/class-dual-role.h>
 #include <linux/usb/usbpd.h>
 #include "usbpd.h"
-
-#undef dev_info
-#define dev_info(x, ...)
-#undef dev_dbg
-#define dev_dbg(x, ...)
-#undef dev_err
-#define dev_err(x, ...)
-#undef pr_info
-#define pr_info(x, ...)
-#undef pr_debug
-#define pr_debug(x, ...)
-#undef pr_error
-#define pr_error(x, ...)
-#undef printk
-#define printk(x, ...)
-#undef printk_deferred
-#define printk_deferred(x, ...)
 
 enum usbpd_state {
 	PE_UNKNOWN,
@@ -216,13 +200,29 @@ enum vdm_state {
 };
 
 static void *usbpd_ipc_log;
-#define usbpd_dbg(dev, fmt, ...)
+#define usbpd_dbg(dev, fmt, ...) do { \
+	ipc_log_string(usbpd_ipc_log, "%s: %s: " fmt, dev_name(dev), __func__, \
+			##__VA_ARGS__); \
+	dev_dbg(dev, fmt, ##__VA_ARGS__); \
+	} while (0)
 
-#define usbpd_info(dev, fmt, ...)
+#define usbpd_info(dev, fmt, ...) do { \
+	ipc_log_string(usbpd_ipc_log, "%s: %s: " fmt, dev_name(dev), __func__, \
+			##__VA_ARGS__); \
+	dev_info(dev, fmt, ##__VA_ARGS__); \
+	} while (0)
 
-#define usbpd_warn(dev, fmt, ...)
+#define usbpd_warn(dev, fmt, ...) do { \
+	ipc_log_string(usbpd_ipc_log, "%s: %s: " fmt, dev_name(dev), __func__, \
+			##__VA_ARGS__); \
+	dev_warn(dev, fmt, ##__VA_ARGS__); \
+	} while (0)
 
-#define usbpd_err(dev, fmt, ...)
+#define usbpd_err(dev, fmt, ...) do { \
+	ipc_log_string(usbpd_ipc_log, "%s: %s: " fmt, dev_name(dev), __func__, \
+			##__VA_ARGS__); \
+	dev_err(dev, fmt, ##__VA_ARGS__); \
+	} while (0)
 
 #define NUM_LOG_PAGES		10
 
@@ -5040,15 +5040,19 @@ static void usbpd_mi_vdm_received_cb(struct usbpd_svid_handler *hdlr, u32 vdm_hd
 		usbpd_dbg(&pd->dev, "usb r_cable now:%dmohm\n", r_cable);
 		break;
 	case USBPD_UVDM_SESSION_SEED:
-		for (i = 0; i < USBPD_UVDM_SS_LEN; i++) {
-			pd->vdm_data.s_secert[i] = vdos[i];
-			usbpd_dbg(&pd->dev, "usbpd s_secert vdos[%d]=0x%x", i, vdos[i]);
+		if (num_vdos != 0) {
+			for (i = 0; i < num_vdos; i++) {
+				pd->vdm_data.s_secert[i] = vdos[i];
+				usbpd_dbg(&pd->dev, "usbpd s_secert vdos[%d]=0x%x", i, vdos[i]);
+			}
 		}
 		break;
 	case USBPD_UVDM_AUTHENTICATION:
-		for (i = 0; i < USBPD_UVDM_SS_LEN; i++) {
-			pd->vdm_data.digest[i] = vdos[i];
-			usbpd_dbg(&pd->dev, "usbpd digest[%d]=0x%x", i, vdos[i]);
+		if (num_vdos != 0) {
+			for (i = 0; i < num_vdos; i++) {
+				pd->vdm_data.digest[i] = vdos[i];
+				usbpd_dbg(&pd->dev, "usbpd digest[%d]=0x%x", i, vdos[i]);
+			}
 		}
 		break;
 	default:

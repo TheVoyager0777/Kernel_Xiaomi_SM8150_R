@@ -1,4 +1,5 @@
 /* Copyright (c) 2017-2019 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,7 +14,7 @@
 #ifndef __STEP_CHG_H__
 #define __STEP_CHG_H__
 
-#ifdef CONFIG_QPNP_SMB5_VAYU
+#ifdef CONFIG_QPNP_SMB5_NABU
 #define MAX_STEP_CHG_ENTRIES	6
 #else
 #define MAX_STEP_CHG_ENTRIES    5
@@ -29,6 +30,10 @@ enum hvdcp3_class_type {
 	HVDCP3_CLASS_NONE = 0,
 	HVDCP3_CLASS_A_18W,
 	HVDCP3_CLASS_B_27W,
+#ifdef CONFIG_QPNP_SMB5_NABU
+	HVDCP3P5_CLASS_A_18W,
+	HVDCP3P5_CLASS_B_27W,
+#endif
 };
 
 struct step_chg_jeita_param {

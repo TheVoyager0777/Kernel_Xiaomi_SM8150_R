@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016  xiaomi Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 #define pr_fmt(fmt)	"[Onewire] %s: " fmt, __func__
 

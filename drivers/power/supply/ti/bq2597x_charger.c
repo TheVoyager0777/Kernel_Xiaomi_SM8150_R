@@ -2,6 +2,7 @@
  * BQ2570x battery charging driver
  *
  * Copyright (C) 2017 Texas Instruments *
+ * Copyright (C) 2021 XiaoMi, Inc.
  * This package is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -38,22 +39,11 @@
 #include "bq25970_reg.h"
 /*#include "bq2597x.h"*/
 
-#undef dev_info
-#define dev_info(x, ...)
-#undef dev_dbg
-#define dev_dbg(x, ...)
-#undef dev_err
-#define dev_err(x, ...)
-#undef pr_info
-#define pr_info(x, ...)
-#undef pr_debug
-#define pr_debug(x, ...)
-#undef pr_error
-#define pr_error(x, ...)
-#undef printk
-#define printk(x, ...)
-#undef printk_deferred
-#define printk_deferred(x, ...)
+enum {
+	VBUS_ERROR_NONE,
+	VBUS_ERROR_LOW,
+	VBUS_ERROR_HIGH,
+};
 
 enum {
 	ADC_IBUS,
@@ -178,6 +168,8 @@ enum hvdcp3_type {
 	HVDCP3_NONE = 0,
 	HVDCP3_CLASSA_18W,
 	HVDCP3_CLASSB_27W,
+	HVDCP3P5_CLASSA_18W,
+	HVDCP3P5_CLASSB_27W,
 };
 
 #define BUS_OVP_FOR_QC			10000
@@ -186,6 +178,10 @@ enum hvdcp3_type {
 #define BUS_OCP_ALARM_FOR_QC_CLASS_A			2000
 #define BUS_OCP_FOR_QC_CLASS_B			3750
 #define BUS_OCP_ALARM_FOR_QC_CLASS_B			2800
+#define BUS_OCP_FOR_QC3P5_CLASS_A			3000
+#define BUS_OCP_ALARM_FOR_QC3P5_CLASS_A		2500
+#define BUS_OCP_FOR_QC3P5_CLASS_B			3500
+#define BUS_OCP_ALARM_FOR_QC3P5_CLASS_B		3200
 
 /*end*/
 
@@ -1641,6 +1637,16 @@ static int bq2597x_set_bus_protection(struct bq2597x *bq, int hvdcp3_type)
 		bq2597x_set_busovp_alarm_th(bq, BUS_OVP_ALARM_FOR_QC);
 		bq2597x_set_busocp_th(bq, BUS_OCP_FOR_QC_CLASS_B);
 		bq2597x_set_busocp_alarm_th(bq, BUS_OCP_ALARM_FOR_QC_CLASS_B);
+	} else if (hvdcp3_type == HVDCP3P5_CLASSA_18W) {
+		bq2597x_set_busovp_th(bq, BUS_OVP_FOR_QC);
+		bq2597x_set_busovp_alarm_th(bq, BUS_OVP_ALARM_FOR_QC);
+		bq2597x_set_busocp_th(bq, BUS_OCP_FOR_QC3P5_CLASS_A);
+		bq2597x_set_busocp_alarm_th(bq, BUS_OCP_ALARM_FOR_QC3P5_CLASS_A);
+	} else if (hvdcp3_type == HVDCP3P5_CLASSB_27W) {
+		bq2597x_set_busovp_th(bq, BUS_OVP_FOR_QC);
+		bq2597x_set_busovp_alarm_th(bq, BUS_OVP_ALARM_FOR_QC);
+		bq2597x_set_busocp_th(bq, BUS_OCP_FOR_QC3P5_CLASS_B);
+		bq2597x_set_busocp_alarm_th(bq, BUS_OCP_ALARM_FOR_QC3P5_CLASS_B);
 	} else {
 		bq2597x_set_busovp_th(bq, bq->cfg->bus_ovp_th);
 		bq2597x_set_busovp_alarm_th(bq, bq->cfg->bus_ovp_alm_th);
@@ -1809,6 +1815,7 @@ static enum power_supply_property bq2597x_charger_props[] = {
 
 static void bq2597x_check_alarm_status(struct bq2597x *bq);
 static void bq2597x_check_fault_status(struct bq2597x *bq);
+static int bq2597x_check_vbus_error_status(struct bq2597x *bq);
 
 static int bq2597x_charger_get_property(struct power_supply *psy,
 				enum power_supply_property psp,
@@ -1938,6 +1945,9 @@ static int bq2597x_charger_get_property(struct power_supply *psy,
 				val->strval = "bq2597x-standalone";
 		}
 		break;
+	case POWER_SUPPLY_PROP_TI_BUS_ERROR_STATUS:
+		val->intval = bq2597x_check_vbus_error_status(bq);
+		break;
 	default:
 		return -EINVAL;
 
@@ -1970,6 +1980,23 @@ static int bq2597x_charger_set_property(struct power_supply *psy,
 	}
 
 	return 0;
+}
+
+static int bq2597x_check_vbus_error_status(struct bq2597x *bq)
+{
+	int ret;
+	u8 stat = 0;
+
+	ret = bq2597x_read_byte(bq, BQ2597X_REG_0A, &stat);
+	if (!ret) {
+		bq_info("BQ2597X_REG_0A:0x%02x\n", stat);
+		if (stat & VBUS_ERROR_LOW_MASK)
+			return VBUS_ERROR_LOW;
+		else if (stat & VBUS_ERROR_HIGH_MASK)
+			return VBUS_ERROR_HIGH;
+	}
+
+	return VBUS_ERROR_NONE;
 }
 
 static int bq2597x_charger_is_writeable(struct power_supply *psy,

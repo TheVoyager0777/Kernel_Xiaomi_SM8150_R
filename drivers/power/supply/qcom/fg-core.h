@@ -1,4 +1,5 @@
 /* Copyright (c) 2016-2019, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -478,8 +479,11 @@ struct fg_dev {
 	struct power_supply	*dc_psy;
 	struct power_supply	*parallel_psy;
 	struct power_supply	*pc_port_psy;
-#ifdef CONFIG_BATT_VERIFY_BY_DS28E16
+#if (defined CONFIG_BATT_VERIFY_BY_DS28E16 || defined CONFIG_BATT_VERIFY_BY_DS28E16_NABU)
 	struct power_supply *max_verify_psy;
+#endif
+#ifdef CONFIG_BATT_VERIFY_BY_DS28E16_NABU
+        struct power_supply *max_verify_slave_psy;
 #endif
 	struct fg_irq_info	*irqs;
 	struct votable		*awake_votable;

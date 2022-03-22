@@ -19,7 +19,7 @@ config QPNP_FG_GEN4
 	  reported through a BMS power supply property and also sends uevents
 	  when the capacity is updated.
 
-config QPNP_FG_GEN4_VAYU
+config QPNP_FG_GEN4_NABU
         tristate "QPNP GEN4 fuel gauge driver"
         depends on MFD_SPMI_PMIC
         help
@@ -89,6 +89,17 @@ config HALO_7221
 	  The driver controls 7221 via I2C and
 	  supports device-tree interface.
 
+config IDT_P9418
+	tristate "idtp9418 wireless Charger"
+	depends on I2C
+	help
+	  Say Y to include support for idtp9418 wireless Charger.
+	  idtp9418 is a wireless battery charger.
+	  The driver supports charger enable/disable.
+	  The driver reports the charger status via the power supply framework.
+	  The driver controls idtp9418 via I2C and
+	  supports device-tree interface.
+
 config RX1619_TRIM
 	tristate "RX1619 TRIM"
 	depends on I2C
@@ -137,18 +148,18 @@ config QPNP_SMB5
 	  VBUS and VCONN regulators are registered for supporting OTG,
 	  and powered Type-C cables respectively.
 
-config QPNP_SMB5_VAYU
-	tristate "SMB5 Battery Charger"
-	depends on MFD_SPMI_PMIC
-	help
-	  Say Y to enables support for the SMB5 charging peripheral.
-	  The QPNP SMB5 charger driver supports the charger peripheral
-	  present in the chip.
-	  The power supply framework is used to communicate battery and
-	  usb properties to userspace and other driver consumers such
-	  as fuel gauge, USB, and USB-PD.
-	  VBUS and VCONN regulators are registered for supporting OTG,
-	  and powered Type-C cables respectively.
+config QPNP_SMB5_NABU
+        tristate "SMB5 Battery Charger"
+        depends on MFD_SPMI_PMIC
+        help
+          Say Y to enables support for the SMB5 charging peripheral.
+          The QPNP SMB5 charger driver supports the charger peripheral
+          present in the chip.
+          The power supply framework is used to communicate battery and
+          usb properties to userspace and other driver consumers such
+          as fuel gauge, USB, and USB-PD.
+          VBUS and VCONN regulators are registered for supporting OTG,
+          and powered Type-C cables respectively.
 
 config SMB138X_CHARGER
 	tristate "SMB138X Battery Charger"
