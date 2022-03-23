@@ -329,7 +329,11 @@ swp_entry_t get_swap_page(struct page *page)
 	 */
 	cache = raw_cpu_ptr(&swp_slots);
 
+#ifdef CONFIG_HSWAP
+	if (check_cache_active() && current_is_kswapd()) {
+#else
 	if (check_cache_active()) {
+#endif
 		mutex_lock(&cache->alloc_lock);
 		if (cache->slots) {
 repeat:
@@ -348,7 +352,14 @@ repeat:
 			return entry;
 	}
 
+#ifdef CONFIG_HSWAP
+	if (!current_is_kswapd())
+		get_lowest_prio_swap_page(1, false, &entry);
+	else
+		get_swap_pages(1, false, &entry);
+#else
 	get_swap_pages(1, false, &entry);
+#endif
 
 	return entry;
 }

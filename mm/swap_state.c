@@ -38,7 +38,11 @@ static const struct address_space_operations swap_aops = {
 };
 
 struct address_space *swapper_spaces[MAX_SWAPFILES] __read_mostly;
+#ifdef CONFIG_HSWAP
+unsigned int nr_swapper_spaces[MAX_SWAPFILES] __read_mostly;
+#else
 static unsigned int nr_swapper_spaces[MAX_SWAPFILES] __read_mostly;
+#endif
 bool enable_vma_readahead __read_mostly = true;
 
 #define SWAP_RA_WIN_SHIFT	(PAGE_SHIFT / 2)

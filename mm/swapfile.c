@@ -1032,6 +1032,147 @@ noswap:
 	return n_ret;
 }
 
+#ifdef CONFIG_HSWAP
+unsigned long get_lowest_prio_swapper_space_nrpages()
+{
+	int i;
+	int lp_prio;
+	int lp_index;
+	unsigned long total = 0;
+
+	lp_prio = SHRT_MAX + 1;
+	lp_index = -1;
+
+	for (i = 0; i < nr_swapfiles; ++i) {
+		if ((swap_info[i]->flags & SWP_WRITEOK) &&
+			(swap_info[i]->prio < lp_prio)) {
+			lp_prio = swap_info[i]->prio;
+			lp_index = i;
+		}
+	}
+
+	if (lp_index != -1) {
+		int max = nr_swapper_spaces[lp_index];
+		for (i = 0; i < max; i++) {
+			total += swapper_spaces[lp_index][i].nrpages;
+		}
+		return total;
+	}
+
+	return 0;
+}
+
+int get_lowest_prio_swap_page(int n_goal, bool cluster, swp_entry_t swp_entries[])
+{
+	unsigned long nr_pages = cluster ? SWAPFILE_CLUSTER : 1;
+	struct swap_info_struct *si, *next;
+	long avail_pgs;
+	int n_ret = 0;
+	int node;
+	int i, lp_prio, lp_index, first = 1;
+
+	/* Only single cluster request supported */
+	WARN_ON_ONCE(n_goal > 1 && cluster);
+
+	avail_pgs = atomic_long_read(&nr_swap_pages) / nr_pages;
+	if (avail_pgs <= 0)
+		goto noswap;
+
+	if (n_goal > SWAP_BATCH)
+		n_goal = SWAP_BATCH;
+
+	if (n_goal > avail_pgs)
+		n_goal = avail_pgs;
+
+	atomic_long_sub(n_goal * nr_pages, &nr_swap_pages);
+
+	lp_prio = SHRT_MAX + 1;
+	lp_index = 0;
+
+	for (i = 0; i < nr_swapfiles; ++i) {
+		if ((swap_info[i]->flags & SWP_WRITEOK) &&
+			(swap_info[i]->prio < lp_prio)) {
+			lp_prio = swap_info[i]->prio;
+			lp_index = i;
+		}
+	}
+
+	spin_lock(&swap_avail_lock);
+
+start_over:
+	node = numa_node_id();
+	plist_for_each_entry_safe(si, next, &swap_avail_heads[node], avail_lists[node]) {
+		/* requeue si to after same-priority siblings */
+		plist_requeue(&si->avail_lists[node], &swap_avail_heads[node]);
+		spin_unlock(&swap_avail_lock);
+		spin_lock(&si->lock);
+
+		if (first) {
+			if (si->prio != swap_info[lp_index]->prio) {
+				spin_lock(&swap_avail_lock);
+				spin_unlock(&si->lock);
+				goto nextsi;
+			}
+		}
+
+		if (!si->highest_bit || !(si->flags & SWP_WRITEOK)) {
+			spin_lock(&swap_avail_lock);
+			if (plist_node_empty(&si->avail_lists[node])) {
+				spin_unlock(&si->lock);
+				goto nextsi;
+			}
+			WARN(!si->highest_bit,
+			     "swap_info %d in list but !highest_bit\n",
+			     si->type);
+			WARN(!(si->flags & SWP_WRITEOK),
+			     "swap_info %d in list but !SWP_WRITEOK\n",
+			     si->type);
+			__del_from_avail_list(si);
+			spin_unlock(&si->lock);
+			goto nextsi;
+		}
+		if (cluster) {
+			if (!(si->flags & SWP_FILE))
+				n_ret = swap_alloc_cluster(si, swp_entries);
+		} else
+			n_ret = scan_swap_map_slots(si, SWAP_HAS_CACHE,
+						    n_goal, swp_entries);
+		spin_unlock(&si->lock);
+		if (n_ret || cluster)
+			goto check_out;
+		pr_debug("scan_swap_map of si %d failed to find offset\n",
+			si->type);
+
+		spin_lock(&swap_avail_lock);
+nextsi:
+		/*
+		 * if we got here, it's likely that si was almost full before,
+		 * and since scan_swap_map() can drop the si->lock, multiple
+		 * callers probably all tried to get a page from the same si
+		 * and it filled up before we could get one; or, the si filled
+		 * up between us dropping swap_avail_lock and taking si->lock.
+		 * Since we dropped the swap_avail_lock, the swap_avail_head
+		 * list may have been modified; so if next is still in the
+		 * swap_avail_head list then try it, otherwise start over
+		 * if we have not gotten any slots.
+		 */
+		if (plist_node_empty(&next->avail_lists[node])) {
+			first = 0;
+			goto start_over;
+		}
+	}
+
+	spin_unlock(&swap_avail_lock);
+
+check_out:
+	if (n_ret < n_goal)
+		atomic_long_add((long)(n_goal - n_ret) * nr_pages,
+				&nr_swap_pages);
+noswap:
+	return n_ret;
+}
+#endif
+
 /* The only caller of this function is now suspend routine */
 swp_entry_t get_swap_page_of_type(int type)
 {

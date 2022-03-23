@@ -453,6 +453,11 @@ static inline long get_nr_swap_pages(void)
 extern void si_swapinfo(struct sysinfo *);
 extern swp_entry_t get_swap_page(struct page *page);
 extern void put_swap_page(struct page *page, swp_entry_t entry);
+#ifdef CONFIG_HSWAP
+extern unsigned long get_lowest_prio_swapper_space_nrpages(void);
+extern int get_lowest_prio_swap_page(int n, bool cluster, swp_entry_t swp_entries[]);
+extern unsigned int nr_swapper_spaces[];
+#endif
 extern swp_entry_t get_swap_page_of_type(int);
 extern int get_swap_pages(int n, bool cluster, swp_entry_t swp_entries[]);
 extern int add_swap_count_continuation(swp_entry_t, gfp_t);

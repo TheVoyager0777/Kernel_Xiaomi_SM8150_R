@@ -855,3 +855,14 @@ config FORCE_ALLOC_FROM_DMA_ZONE
 	  always using ZONE_DMA memory.
 
 	  If unsure, say "n".
+
+config HSWAP
+	bool "Enable Hybrid SWAP"
+	depends on SWAP && ZRAM && PROCESS_RECLAIM
+	default y
+	help
+		This config supports multiple swap files which are based on different
+		block devices such as eMMC, UFS, or ZRAM.
+		kswapd use high priority swap file.
+		lowmemorykiller and direct reclaim module use low priority swap file.
+		lowmemorykiller reclaims pages of victim process instead kill the process.

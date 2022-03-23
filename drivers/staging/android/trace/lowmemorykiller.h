@@ -34,6 +34,32 @@ TRACE_EVENT(lowmemory_kill,
 		__entry->pagecache_limit, __entry->free)
 );
 
+#ifdef CONFIG_HSWAP
+TRACE_EVENT(lowmemory_kill_task_list,
+	TP_PROTO(struct task_struct *killed_task, int lmk_kill_cnt),
+
+	TP_ARGS(killed_task, lmk_kill_cnt),
+
+	TP_STRUCT__entry(
+			__array(char, comm, TASK_COMM_LEN)
+			__field(pid_t, pid)
+			__field(long, top_time)
+			__field(short, top_count)
+			__field(int, lmk_kill_cnt);
+	),
+
+	TP_fast_assign(
+			memcpy(__entry->comm, killed_task->comm, TASK_COMM_LEN);
+			__entry->pid = killed_task->pid;
+			__entry->top_time = killed_task->signal->top_time;
+			__entry->top_count = killed_task->signal->top_count;
+			__entry->lmk_kill_cnt = lmk_kill_cnt;
+	),
+
+	TP_printk("LMK count %d comm: %s (%d) top_time = %ld top_count %d",
+		__entry->lmk_kill_cnt, __entry->comm, __entry->pid, __entry->top_time, __entry->top_count)
+);
+#endif
 
 #endif /* if !defined(_TRACE_LOWMEMORYKILLER_H) || defined(TRACE_HEADER_MULTI_READ) */
 
