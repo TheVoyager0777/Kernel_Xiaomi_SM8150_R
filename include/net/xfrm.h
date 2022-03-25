@@ -23,6 +23,7 @@
 #include <net/ipv6.h>
 #include <net/ip6_fib.h>
 #include <net/flow.h>
+#include <net/patchcodeid.h>
 #include <net/gro_cells.h>
 
 #include <linux/interrupt.h>
@@ -1158,7 +1159,6 @@ static inline int __xfrm_policy_check2(struct sock *sk, int dir,
 
 	if (sk && sk->sk_policy[XFRM_POLICY_IN])
 		return __xfrm_policy_check(sk, ndir, skb, family);
-
 	return	(!net->xfrm.policy_count[dir] && !skb->sp) ||
 		(skb_dst(skb)->flags & DST_NOPOLICY) ||
 		__xfrm_policy_check(sk, ndir, skb, family);
