@@ -103,11 +103,6 @@ struct zram_stats {
 	atomic64_t bd_reads;		/* no. of reads from backing device */
 	atomic64_t bd_writes;		/* no. of writes from backing device */
 #endif
-	atomic64_t dup_data_size;	/*
-					 * compressed size of pages
-					 * duplicated
-					 */
-	atomic64_t meta_data_size;	/* size of zram_entries */
 };
 
 struct zram_hash {
