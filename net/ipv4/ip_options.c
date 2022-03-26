@@ -30,7 +30,6 @@
 #include <net/cipso_ipv4.h>
 #include <net/ip_fib.h>
 
-
 /*
  * Write options to IP header, record destination address to
  * source route option, address of outgoing interface
