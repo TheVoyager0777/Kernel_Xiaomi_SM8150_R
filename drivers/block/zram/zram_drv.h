@@ -41,11 +41,7 @@
  * The lower ZRAM_FLAG_SHIFT bits is for object size (excluding header),
  * the higher bits is for zram_pageflags.
  */
-#if IS_ENABLED(CONFIG_MIUI_ZRAM_MEMORY_TRACKING)
-#define ZRAM_FLAG_SHIFT (PAGE_SHIFT + 1)
-#else
 #define ZRAM_FLAG_SHIFT 24
-#endif
 
 /* Flags for zram pages (table[page_no].flags) */
 enum zram_pageflags {
@@ -59,17 +55,6 @@ enum zram_pageflags {
 
 	__NR_ZRAM_PAGEFLAGS,
 };
-
-#if IS_ENABLED(CONFIG_MIUI_ZRAM_MEMORY_TRACKING)
-#define ZRAM_WB_IDLE_SHIFT (__NR_ZRAM_PAGEFLAGS)
-
-#define ZRAM_WB_IDLE_BITS_LEN (4U)
-
-#define ZRAM_WB_IDLE_MIN (1U)
-#define ZRAM_WB_IDLE_MAX (10U)
-
-#define ZRAM_WB_IDLE_DEFAULT ZRAM_WB_IDLE_MIN
-#endif
 
 /*-- Data structures */
 
@@ -88,7 +73,7 @@ struct zram_table_entry {
 		unsigned long element;
 	};
 	unsigned long flags;
-#if defined(CONFIG_ZRAM_MEMORY_TRACKING) || IS_ENABLED(CONFIG_MIUI_ZRAM_MEMORY_TRACKING)
+#ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	ktime_t ac_time;
 #endif
 };
@@ -113,16 +98,10 @@ struct zram_stats {
 					 */
 	atomic64_t meta_data_size;	/* size of zram_entries */
 	atomic64_t miss_free;		/* no. of missed free */
-#ifdef  CONFIG_ZRAM_WRITEBACK
+#ifdef	CONFIG_ZRAM_WRITEBACK
 	atomic64_t bd_count;		/* no. of pages in backing device */
 	atomic64_t bd_reads;		/* no. of reads from backing device */
 	atomic64_t bd_writes;		/* no. of writes from backing device */
-#if IS_ENABLED(CONFIG_MIUI_ZRAM_MEMORY_TRACKING)
-	atomic64_t wb_pages_max;	/* no. of max pages in backing device */
-#endif
-#endif
-#if IS_ENABLED(CONFIG_MIUI_ZRAM_MEMORY_TRACKING)
-	atomic64_t origin_pages_max;	/* no. of maximum origin pages stored */
 #endif
 };
 
@@ -130,15 +109,6 @@ struct zram_hash {
 	spinlock_t lock;
 	struct rb_root rb_root;
 };
-
-#if IS_ENABLED(CONFIG_MIUI_ZRAM_MEMORY_TRACKING)
-struct zram_pages_life {
-	unsigned int time_nr;
-	int *time_list;
-	unsigned long *lifes;
-	struct rcu_head rcu;
-};
-#endif
 
 struct zram {
 	struct zram_table_entry *table;
@@ -178,12 +148,6 @@ struct zram {
 #endif
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	struct dentry *debugfs_dir;
-#endif
-#if IS_ENABLED(CONFIG_MIUI_ZRAM_MEMORY_TRACKING)
-	struct zram_pages_life __rcu *pages_life;
-	ktime_t first_time;
-	ktime_t last_time;
-	atomic64_t avg_size;
 #endif
 };
 
