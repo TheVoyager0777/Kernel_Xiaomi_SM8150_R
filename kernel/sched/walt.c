@@ -110,6 +110,9 @@ static void release_rq_locks_irqrestore(const cpumask_t *cpus,
 	local_irq_restore(*flags);
 }
 
+/* 1 -> use PELT based load stats, 0 -> use window-based load stats */
+unsigned int __read_mostly walt_disabled = 0;
+
 __read_mostly unsigned int sysctl_sched_cpu_high_irqload = TICK_NSEC;
 
 unsigned int sysctl_sched_walt_rotate_big_tasks;

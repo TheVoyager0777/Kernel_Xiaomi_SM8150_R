@@ -2021,6 +2021,9 @@ unsigned long arch_scale_cpu_capacity(struct sched_domain *sd, int cpu)
 }
 #endif
 
+extern unsigned int sysctl_sched_use_walt_cpu_util;
+extern unsigned int walt_disabled;
+
 #ifdef CONFIG_SMP
 static inline unsigned long capacity_of(int cpu)
 {
