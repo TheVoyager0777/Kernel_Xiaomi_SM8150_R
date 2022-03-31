@@ -69,7 +69,8 @@ static ssize_t dbgfs_attrs_write(struct file *file,
 	struct damon_ctx *ctx = file->private_data;
 	unsigned long s, a, r, minr, maxr;
 	char *kbuf;
-	ssize_t ret;
+	ssize_t ret = count;
+	int err;
 
 	kbuf = user_input_str(buf, count, ppos);
 	if (IS_ERR(kbuf))
@@ -87,9 +88,9 @@ static ssize_t dbgfs_attrs_write(struct file *file,
 		goto unlock_out;
 	}
 
-	ret = damon_set_attrs(ctx, s, a, r, minr, maxr);
-	if (!ret)
-		ret = count;
+	err = damon_set_attrs(ctx, s, a, r, minr, maxr);
+	if (err)
+		ret = err;
 unlock_out:
 	mutex_unlock(&ctx->kdamond_lock);
 out:
@@ -219,13 +220,14 @@ static ssize_t dbgfs_schemes_write(struct file *file, const char __user *buf,
 	struct damon_ctx *ctx = file->private_data;
 	char *kbuf;
 	struct damos **schemes;
-	ssize_t nr_schemes = 0, ret;
+	ssize_t nr_schemes = 0, ret = count;
+	int err;
 
 	kbuf = user_input_str(buf, count, ppos);
 	if (IS_ERR(kbuf))
 		return PTR_ERR(kbuf);
 
-	schemes = str_to_schemes(kbuf, count, &nr_schemes);
+	schemes = str_to_schemes(kbuf, ret, &nr_schemes);
 	if (!schemes) {
 		ret = -EINVAL;
 		goto out;
@@ -237,12 +239,11 @@ static ssize_t dbgfs_schemes_write(struct file *file, const char __user *buf,
 		goto unlock_out;
 	}
 
-	ret = damon_set_schemes(ctx, schemes, nr_schemes);
-	if (!ret) {
-		ret = count;
+	err = damon_set_schemes(ctx, schemes, nr_schemes);
+	if (err)
+		ret = err;
+	else
 		nr_schemes = 0;
-	}
-
 unlock_out:
 	mutex_unlock(&ctx->kdamond_lock);
 	free_schemes_arr(schemes, nr_schemes);
@@ -342,8 +343,9 @@ static ssize_t dbgfs_target_ids_write(struct file *file,
 	char *kbuf, *nrs;
 	unsigned long *targets;
 	ssize_t nr_targets;
-	ssize_t ret;
+	ssize_t ret = count;
 	int i;
+	int err;
 
 	kbuf = user_input_str(buf, count, ppos);
 	if (IS_ERR(kbuf))
@@ -356,7 +358,7 @@ static ssize_t dbgfs_target_ids_write(struct file *file,
 		scnprintf(kbuf, count, "42    ");
 	}
 
-	targets = str_to_target_ids(nrs, count, &nr_targets);
+	targets = str_to_target_ids(nrs, ret, &nr_targets);
 	if (!targets) {
 		ret = -ENOMEM;
 		goto out;
@@ -391,12 +393,11 @@ static ssize_t dbgfs_target_ids_write(struct file *file,
 	else
 		damon_pa_set_primitives(ctx);
 
-	ret = damon_set_targets(ctx, targets, nr_targets);
-	if (ret) {
+	err = damon_set_targets(ctx, targets, nr_targets);
+	if (err) {
 		if (id_is_pid)
 			dbgfs_put_pids(targets, nr_targets);
-	} else {
-		ret = count;
+		ret = err;
 	}
 
 unlock_out:
@@ -714,7 +715,8 @@ static ssize_t dbgfs_mk_context_write(struct file *file,
 {
 	char *kbuf;
 	char *ctx_name;
-	ssize_t ret;
+	ssize_t ret = count;
+	int err;
 
 	kbuf = user_input_str(buf, count, ppos);
 	if (IS_ERR(kbuf))
@@ -732,9 +734,9 @@ static ssize_t dbgfs_mk_context_write(struct file *file,
 	}
 
 	mutex_lock(&damon_dbgfs_lock);
-	ret = dbgfs_mk_context(ctx_name);
-	if (!ret)
-		ret = count;
+	err = dbgfs_mk_context(ctx_name);
+	if (err)
+		ret = err;
 	mutex_unlock(&damon_dbgfs_lock);
 
 out:
@@ -803,7 +805,8 @@ static ssize_t dbgfs_rm_context_write(struct file *file,
 		const char __user *buf, size_t count, loff_t *ppos)
 {
 	char *kbuf;
-	ssize_t ret;
+	ssize_t ret = count;
+	int err;
 	char *ctx_name;
 
 	kbuf = user_input_str(buf, count, ppos);
@@ -822,9 +825,9 @@ static ssize_t dbgfs_rm_context_write(struct file *file,
 	}
 
 	mutex_lock(&damon_dbgfs_lock);
-	ret = dbgfs_rm_context(ctx_name);
-	if (!ret)
-		ret = count;
+	err = dbgfs_rm_context(ctx_name);
+	if (err)
+		ret = err;
 	mutex_unlock(&damon_dbgfs_lock);
 
 out:
@@ -848,8 +851,9 @@ static ssize_t dbgfs_monitor_on_read(struct file *file,
 static ssize_t dbgfs_monitor_on_write(struct file *file,
 		const char __user *buf, size_t count, loff_t *ppos)
 {
-	ssize_t ret;
+	ssize_t ret = count;
 	char *kbuf;
+	int err;
 
 	kbuf = user_input_str(buf, count, ppos);
 	if (IS_ERR(kbuf))
@@ -862,14 +866,14 @@ static ssize_t dbgfs_monitor_on_write(struct file *file,
 	}
 
 	if (!strncmp(kbuf, "on", count))
-		ret = damon_start(dbgfs_ctxs, dbgfs_nr_ctxs);
+		err = damon_start(dbgfs_ctxs, dbgfs_nr_ctxs);
 	else if (!strncmp(kbuf, "off", count))
-		ret = damon_stop(dbgfs_ctxs, dbgfs_nr_ctxs);
+		err = damon_stop(dbgfs_ctxs, dbgfs_nr_ctxs);
 	else
-		ret = -EINVAL;
+		err = -EINVAL;
 
-	if (!ret)
-		ret = count;
+	if (err)
+		ret = err;
 	kfree(kbuf);
 	return ret;
 }
