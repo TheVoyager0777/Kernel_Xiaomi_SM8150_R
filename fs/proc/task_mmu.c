@@ -2075,7 +2075,7 @@ int reclaim_address_space(struct address_space *mapping,
 	return ret;
 }
 
-int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
+static int reclaim_pte_range(pmd_t *pmd, unsigned long addr,
 				unsigned long end, struct mm_walk *walk)
 {
 	struct reclaim_param *rp = walk->private;
@@ -2108,7 +2108,7 @@ cont:
 		if (page_mapcount(page) != 1)
 			continue;
 
-		if (isolate_lru_page(compound_head(page)))
+		if (isolate_lru_page(page))
 			continue;
 
 		/* MADV_FREE clears pte dirty bit and then marks the page
@@ -2305,7 +2305,6 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 			ret = walk_page_range(mm, max(vma->vm_start, start),
 					min(vma->vm_end, end),
 					&reclaim_walk_ops, &rp);
-
 			if (ret)
 				break;
 			vma = vma->vm_next;
@@ -2324,7 +2323,6 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 			rp.vma = vma;
 			ret = walk_page_range(mm, vma->vm_start, vma->vm_end,
 				&reclaim_walk_ops, &rp);
-
 			if (ret)
 				break;
 		}
