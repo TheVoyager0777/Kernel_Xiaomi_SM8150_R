@@ -14,7 +14,6 @@
 #include <linux/page_idle.h>
 #include <linux/pagewalk.h>
 #include <linux/sched/mm.h>
-#include <linux/sched/task.h>
 
 #include "prmtv-common.h"
 
