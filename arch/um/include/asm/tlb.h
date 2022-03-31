@@ -158,7 +158,9 @@ tlb_flush_pmd_range(struct mmu_gather *tlb, unsigned long address,
 #define tlb_remove_huge_tlb_entry(h, tlb, ptep, address)	\
 	tlb_remove_tlb_entry(tlb, ptep, address)
 
-static inline void tlb_change_page_size(struct mmu_gather *tlb, unsigned int page_size)
+#define tlb_remove_check_page_size_change tlb_remove_check_page_size_change
+static inline void tlb_remove_check_page_size_change(struct mmu_gather *tlb,
+						     unsigned int page_size)
 {
 }
 
