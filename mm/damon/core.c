@@ -652,7 +652,9 @@ static int kdamond_fn(void *data)
 	unsigned int max_nr_accesses = 0;
 	unsigned long sz_limit = 0;
 
-	pr_debug("kdamond (%d) starts\n", current->pid);
+	mutex_lock(&ctx->kdamond_lock);
+	pr_debug("kdamond (%d) starts\n", ctx->kdamond->pid);
+	mutex_unlock(&ctx->kdamond_lock);
 
 	if (ctx->primitive.init)
 		ctx->primitive.init(ctx);
@@ -703,7 +705,7 @@ static int kdamond_fn(void *data)
 	if (ctx->primitive.cleanup)
 		ctx->primitive.cleanup(ctx);
 
-	pr_debug("kdamond (%d) finishes\n", current->pid);
+	pr_debug("kdamond (%d) finishes\n", ctx->kdamond->pid);
 	mutex_lock(&ctx->kdamond_lock);
 	ctx->kdamond = NULL;
 	mutex_unlock(&ctx->kdamond_lock);
