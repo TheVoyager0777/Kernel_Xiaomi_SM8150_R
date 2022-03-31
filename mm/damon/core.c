@@ -103,7 +103,8 @@ struct damos *damon_new_scheme(
 	scheme->min_age_region = min_age_region;
 	scheme->max_age_region = max_age_region;
 	scheme->action = action;
-	scheme->stat = (struct damos_stat){};
+	scheme->stat_count = 0;
+	scheme->stat_sz = 0;
 	INIT_LIST_HEAD(&scheme->list);
 
 	scheme->quota.ms = quota->ms;
@@ -574,7 +575,6 @@ static void damon_do_apply_schemes(struct damon_ctx *c,
 		struct damos_quota *quota = &s->quota;
 		unsigned long sz = r->ar.end - r->ar.start;
 		struct timespec64 begin, end;
-		unsigned long sz_applied = 0;
 
 		if (!s->wmarks.activated)
 			continue;
@@ -628,7 +628,7 @@ static void damon_do_apply_schemes(struct damon_ctx *c,
 				damon_split_region_at(c, t, r, sz);
 			}
 			ktime_get_coarse_ts64(&begin);
-			sz_applied = c->primitive.apply_scheme(c, t, r, s);
+			c->primitive.apply_scheme(c, t, r, s);
 			ktime_get_coarse_ts64(&end);
 			quota->total_charged_ns += timespec64_to_ns(&end) -
 				timespec64_to_ns(&begin);
@@ -642,11 +642,8 @@ static void damon_do_apply_schemes(struct damon_ctx *c,
 			r->age = 0;
 
 update_stat:
-		s->stat.nr_tried++;
-		s->stat.sz_tried += sz;
-		if (sz_applied)
-			s->stat.nr_applied++;
-		s->stat.sz_applied += sz_applied;
+		s->stat_count++;
+		s->stat_sz += sz;
 	}
 }
 

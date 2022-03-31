@@ -213,15 +213,14 @@ bool damon_pa_target_valid(void *t)
 	return true;
 }
 
-static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
-		struct damon_target *t, struct damon_region *r,
-		struct damos *scheme)
+static int damon_pa_apply_scheme(struct damon_ctx *ctx, struct damon_target *t,
+		struct damon_region *r, struct damos *scheme)
 {
-	unsigned long addr, applied;
+	unsigned long addr;
 	LIST_HEAD(page_list);
 
 	if (scheme->action != DAMOS_PAGEOUT)
-		return 0;
+		return -EINVAL;
 
 	for (addr = r->ar.start; addr < r->ar.end; addr += PAGE_SIZE) {
 		struct page *page = damon_get_page(PHYS_PFN(addr));
@@ -242,9 +241,9 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 			put_page(page);
 		}
 	}
-	applied = reclaim_pages(&page_list);
+	reclaim_pages(&page_list);
 	cond_resched();
-	return applied * PAGE_SIZE;
+	return 0;
 }
 
 static int damon_pa_scheme_score(struct damon_ctx *context,
