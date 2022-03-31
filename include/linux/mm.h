@@ -1327,19 +1327,6 @@ static inline void INIT_VMA(struct vm_area_struct *vma)
 #endif
 }
 
-static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
-{
-	static const struct vm_operations_struct dummy_vm_ops = {};
-
-	memset(vma, 0, sizeof(*vma));
-	vma->vm_mm = mm;
-	vma->vm_ops = &dummy_vm_ops;
-	INIT_VMA(vma);
-}
-
-/* flush_tlb_range() takes a vma, not a mm, and can care about flags */
-#define TLB_FLUSH_VMA(mm,flags) { .vm_mm = (mm), .vm_flags = (flags) }
-
 struct page *__vm_normal_page(struct vm_area_struct *vma, unsigned long addr,
 			      pte_t pte, bool with_public_device,
 			      unsigned long vma_flags);
