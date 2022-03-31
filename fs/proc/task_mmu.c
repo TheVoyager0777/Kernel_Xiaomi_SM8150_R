@@ -1145,7 +1145,7 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 	};
 	int ret = 0;
 	bool rollup_mode;
-	bool last_vma = false;
+	bool last_vma;
 
 	if (priv->rollup) {
 		rollup_mode = true;
