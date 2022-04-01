@@ -63,15 +63,28 @@ static struct kmem_cache *mptcp_sock_cache __read_mostly;
 static struct kmem_cache *mptcp_cb_cache __read_mostly;
 static struct kmem_cache *mptcp_tw_cache __read_mostly;
 
-int sysctl_mptcp_enabled __read_mostly = 1;
+//int sysctl_mptcp_enabled __read_mostly = 1;
 EXPORT_SYMBOL(sysctl_mptcp_enabled);
 int sysctl_mptcp_version __read_mostly = 0;
 static int min_mptcp_version;
 static int max_mptcp_version = 1;
+
+/* 2015-06-03 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [START] */
+int sysctl_mptcp_enabled __read_mostly = 2;
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP_CHECKSUM_ENABLE
 int sysctl_mptcp_checksum __read_mostly = 1;
+#else
+int sysctl_mptcp_checksum __read_mostly = 0;
+#endif
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP_SYN_RETRY_1
+int sysctl_mptcp_syn_retries __read_mostly = 1;
+#else
+int sysctl_mptcp_syn_retries __read_mostly = 3;
+#endif
+/* 2015-06-03 jewon.lee@lge.com, LGP_DATA_TCPIP_MPTCP [END] */
 int sysctl_mptcp_debug __read_mostly;
 EXPORT_SYMBOL(sysctl_mptcp_debug);
-int sysctl_mptcp_syn_retries __read_mostly = 3;
+//int sysctl_mptcp_syn_retries __read_mostly = 3;
 
 bool mptcp_init_failed __read_mostly;
 
@@ -773,24 +786,6 @@ static void mptcp_set_state(struct sock *sk)
 	}
 }
 
-static int mptcp_set_congestion_control(struct sock *meta_sk, const char *name,
-					bool load, bool reinit, bool cap_net_admin)
-{
-	int err, result = 0;
-	struct sock *sk_it;
-
-	result = __tcp_set_congestion_control(meta_sk, name, load, reinit, cap_net_admin);
-
-	tcp_sk(meta_sk)->mpcb->tcp_ca_explicit_set = true;
-
-	mptcp_for_each_sk(tcp_sk(meta_sk)->mpcb, sk_it) {
-		err = __tcp_set_congestion_control(sk_it, name, load, reinit, cap_net_admin);
-		if (err)
-			result = err;
-	}
-	return result;
-}
-
 static void mptcp_assign_congestion_control(struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -799,11 +794,8 @@ static void mptcp_assign_congestion_control(struct sock *sk)
 
 	/* Congestion control is the same as meta. Thus, it has been
 	 * try_module_get'd by tcp_assign_congestion_control.
-	 * Congestion control on meta was not explicitly configured by
-	 * application, leave default or route based.
 	 */
-	if (icsk->icsk_ca_ops == ca ||
-	    !tcp_sk(mptcp_meta_sk(sk))->mpcb->tcp_ca_explicit_set)
+	if (icsk->icsk_ca_ops == ca)
 		return;
 
 	/* Use the same congestion control as set on the meta-sk */
@@ -815,7 +807,6 @@ static void mptcp_assign_congestion_control(struct sock *sk)
 		WARN(1, "Could not get the congestion control!");
 		return;
 	}
-	module_put(icsk->icsk_ca_ops->owner);
 	icsk->icsk_ca_ops = ca;
 
 	/* Clear out private data before diag gets it and
@@ -1083,7 +1074,6 @@ static const struct tcp_sock_ops mptcp_meta_specific = {
 	.retransmit_timer		= mptcp_meta_retransmit_timer,
 	.time_wait			= mptcp_time_wait,
 	.cleanup_rbuf			= mptcp_cleanup_rbuf,
-	.set_cong_ctrl                  = mptcp_set_congestion_control,
 };
 
 static const struct tcp_sock_ops mptcp_sub_specific = {
@@ -1101,7 +1091,6 @@ static const struct tcp_sock_ops mptcp_sub_specific = {
 	.retransmit_timer		= mptcp_sub_retransmit_timer,
 	.time_wait			= tcp_time_wait,
 	.cleanup_rbuf			= tcp_cleanup_rbuf,
-	.set_cong_ctrl                  = __tcp_set_congestion_control,
 };
 
 static int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key,
@@ -1125,7 +1114,6 @@ static int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key,
 		goto err_alloc_master;
 
 	master_tp = tcp_sk(master_sk);
-	master_tp->inside_tk_table = 0;
 
 	mpcb = kmem_cache_zalloc(mptcp_cb_cache, GFP_ATOMIC);
 	if (!mpcb)
@@ -1196,6 +1184,7 @@ static int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key,
 		local_bh_enable();
 		rcu_read_unlock();
 	}
+	master_tp->inside_tk_table = 0;
 
 #if IS_ENABLED(CONFIG_IPV6)
 	if (meta_icsk->icsk_af_ops == &mptcp_v6_mapped) {
@@ -1263,7 +1252,6 @@ static int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key,
 	meta_tp->copied_seq = (u32)rcv_idsn;
 	meta_tp->rcv_nxt = (u32)rcv_idsn;
 	meta_tp->rcv_wup = (u32)rcv_idsn;
-	meta_tp->rcv_right_edge = meta_tp->rcv_wup + meta_tp->rcv_wnd;
 
 	meta_tp->snd_wl1 = meta_tp->rcv_nxt - 1;
 	meta_tp->snd_wnd = window;
@@ -1283,8 +1271,6 @@ static int mptcp_alloc_mpcb(struct sock *meta_sk, __u64 remote_key,
 	/* Initialize the queues */
 	master_tp->out_of_order_queue = RB_ROOT;
 	INIT_LIST_HEAD(&master_tp->tsq_node);
-
-	master_tp->fastopen_req = NULL;
 
 	master_sk->sk_tsq_flags = 0;
 	/* icsk_bind_hash inherited from the meta, but it will be properly set in
@@ -1396,6 +1382,8 @@ int mptcp_add_sock(struct sock *meta_sk, struct sock *sk, u8 loc_id, u8 rem_id,
 	tp->mptcp->attached = 1;
 
 	mpcb->cnt_subflows++;
+	atomic_add(atomic_read(&((struct sock *)tp)->sk_rmem_alloc),
+		   &meta_sk->sk_rmem_alloc);
 
 	mptcp_sub_inherit_sockopts(meta_sk, sk);
 	INIT_DELAYED_WORK(&tp->mptcp->work, mptcp_sub_close_wq);
@@ -1662,7 +1650,6 @@ void mptcp_sub_close(struct sock *sk, unsigned long delay)
 		if (!cancel_delayed_work(work))
 			return;
 		sock_put(sk);
-		mptcp_mpcb_put(tp->mpcb);
 	}
 
 	if (!delay) {
@@ -2138,28 +2125,14 @@ int mptcp_check_req_master(struct sock *sk, struct sock *child,
 	 */
 	if (drop) {
 		tcp_synack_rtt_meas(child, req);
-
-		inet_csk_reqsk_queue_drop(sk, req);
-		reqsk_queue_removed(&inet_csk(sk)->icsk_accept_queue, req);
-		if (!inet_csk_reqsk_queue_add(sk, req, meta_sk)) {
-			bh_unlock_sock(meta_sk);
-			/* No sock_put() of the meta needed. The reference has
-			 * already been dropped in __mptcp_check_req_master().
-			 */
-			sock_put(child);
-			return -1;
-		}
+		inet_csk_complete_hashdance(sk, meta_sk, req, true);
 	} else {
 		/* Thus, we come from syn-cookies */
 		refcount_set(&req->rsk_refcnt, 1);
 		tcp_sk(meta_sk)->tsoffset = tsoff;
 		if (!inet_csk_reqsk_queue_add(sk, req, meta_sk)) {
 			bh_unlock_sock(meta_sk);
-			/* No sock_put() of the meta needed. The reference has
-			 * already been dropped in __mptcp_check_req_master().
-			 */
-			sock_put(child);
-			reqsk_put(req);
+			sock_put(meta_sk);
 			return -1;
 		}
 	}
@@ -2179,6 +2152,7 @@ struct sock *mptcp_check_req_child(struct sock *meta_sk,
 	u8 hash_mac_check[20];
 
 	child_tp->out_of_order_queue = RB_ROOT;
+	child_tp->inside_tk_table = 0;
 
 	if (!mopt->join_ack) {
 		MPTCP_INC_STATS(sock_net(meta_sk), MPTCP_MIB_JOINACKFAIL);
@@ -2319,12 +2293,11 @@ void mptcp_twsk_destructor(struct tcp_timewait_sock *tw)
 		if (tw->mptcp_tw->in_list) {
 			list_del_rcu(&tw->mptcp_tw->list);
 			tw->mptcp_tw->in_list = 0;
-			/* Put, because we added it to the list */
-			mptcp_mpcb_put(mpcb);
 		}
 		spin_unlock(&mpcb->tw_lock);
 
-		/* Second time, because we increased it above */
+		/* Twice, because we increased it above */
+		mptcp_mpcb_put(mpcb);
 		mptcp_mpcb_put(mpcb);
 	}
 
@@ -2553,7 +2526,7 @@ int mptcp_conn_request(struct sock *sk, struct sk_buff *skb)
 #endif
 	}
 drop:
-	NET_INC_STATS(sock_net(sk), LINUX_MIB_LISTENDROPS);
+	__NET_INC_STATS(sock_net(sk), LINUX_MIB_LISTENDROPS);
 	return 0;
 }
 
@@ -3010,7 +2983,7 @@ void __init mptcp_init(void)
 	if (mptcp_register_scheduler(&mptcp_sched_default))
 		goto register_sched_failed;
 
-	pr_info("MPTCP: Stable release v0.94.8");
+	pr_info("MPTCP: Stable release v0.94.4");
 
 	mptcp_init_failed = false;
 

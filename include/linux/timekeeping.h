@@ -24,7 +24,6 @@ extern int do_sys_settimeofday64(const struct timespec64 *tv,
  * timespec64 based interfaces
  */
 extern void ktime_get_raw_ts64(struct timespec64 *ts);
-struct timespec64 get_monotonic_coarse64(void);
 extern void getrawmonotonic64(struct timespec64 *ts);
 extern void ktime_get_ts64(struct timespec64 *ts);
 extern void ktime_get_real_ts64(struct timespec64 *tv);

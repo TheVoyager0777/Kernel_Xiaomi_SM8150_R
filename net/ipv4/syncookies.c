@@ -428,10 +428,17 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 	    (req->rsk_window_clamp > full_space || req->rsk_window_clamp == 0))
 		req->rsk_window_clamp = full_space;
 
-	tp->ops->select_initial_window(full_space, req->mss,
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+	tp->ops->select_initial_window(sock_net(sk), full_space, req->mss,
 				       &req->rsk_rcv_wnd, &req->rsk_window_clamp,
 				       ireq->wscale_ok, &rcv_wscale,
 				       dst_metric(&rt->dst, RTAX_INITRWND), sk);
+#else
+    tcp_select_initial_window(sock_net(sk), full_space, req->mss,
+        &req->rsk_rcv_wnd, &req->rsk_window_clamp,
+        ireq->wscale_ok, &rcv_wscale,
+        dst_metric(&rt->dst, RTAX_INITRWND));
+#endif
 
 	ireq->rcv_wscale  = rcv_wscale;
 	ireq->ecn_ok = cookie_ecn_ok(&tcp_opt, sock_net(sk), &rt->dst);

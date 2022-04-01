@@ -75,7 +75,7 @@ static bool mptcp_is_temp_unavailable(struct sock *sk,
 	 */
 	space = (tp->snd_cwnd - in_flight) * tp->mss_cache;
 
-	if (tp->write_seq - tp->snd_nxt >= space)
+	if (tp->write_seq - tp->snd_nxt > space)
 		return true;
 
 	if (zero_wnd_test && !before(tp->write_seq, tcp_wnd_end(tp)))
@@ -88,7 +88,7 @@ static bool mptcp_is_temp_unavailable(struct sock *sk,
 	 * calculated end_seq (because here at this point end_seq is still at
 	 * the meta-level).
 	 */
-	if (skb && zero_wnd_test &&
+	if (skb && !zero_wnd_test &&
 	    after(tp->write_seq + min(skb->len, mss_now), tcp_wnd_end(tp)))
 		return true;
 
@@ -296,7 +296,7 @@ static struct sk_buff *mptcp_rcv_buf_optimization(struct sock *sk, int penal)
 	if (tcp_jiffies32 - dsp->last_rbuf_opti < usecs_to_jiffies(tp->srtt_us >> 3))
 		goto retrans;
 
-	/* Half the cwnd of the slow flows */
+	/* Half the cwnd of the slow flow */
 	mptcp_for_each_tp(tp->mpcb, tp_it) {
 		if (tp_it != tp &&
 		    TCP_SKB_CB(skb_head)->path_mask & mptcp_pi_to_flag(tp_it->mptcp->path_index)) {
@@ -311,6 +311,7 @@ static struct sk_buff *mptcp_rcv_buf_optimization(struct sock *sk, int penal)
 
 				dsp->last_rbuf_opti = tcp_jiffies32;
 			}
+			break;
 		}
 	}
 
@@ -371,21 +372,14 @@ static struct sk_buff *__mptcp_next_segment(struct sock *meta_sk, int *reinject)
 		if (!skb && meta_sk->sk_socket &&
 		    test_bit(SOCK_NOSPACE, &meta_sk->sk_socket->flags) &&
 		    sk_stream_wspace(meta_sk) < sk_stream_min_wspace(meta_sk)) {
-			struct sock *subsk;
-
-			/* meta is send buffer limited */
-			tcp_chrono_start(meta_sk, TCP_CHRONO_SNDBUF_LIMITED);
-
-			subsk = get_available_subflow(meta_sk, NULL, false);
+			struct sock *subsk = get_available_subflow(meta_sk, NULL,
+								   false);
 			if (!subsk)
 				return NULL;
 
 			skb = mptcp_rcv_buf_optimization(subsk, 0);
 			if (skb)
 				*reinject = -1;
-			else
-				tcp_chrono_start(subsk,
-						 TCP_CHRONO_SNDBUF_LIMITED);
 		}
 	}
 	return skb;
@@ -416,22 +410,11 @@ static struct sk_buff *mptcp_next_segment(struct sock *meta_sk,
 	mss_now = tcp_current_mss(*subsk);
 
 	if (!*reinject && unlikely(!tcp_snd_wnd_test(tcp_sk(meta_sk), skb, mss_now))) {
-		/* an active flow is selected, but segment will not be sent due
-		 * to no more space in send window
-		 * this means the meta is receive window limited
-		 * the subflow might also be, if we have nothing to reinject
-		 */
-		tcp_chrono_start(meta_sk, TCP_CHRONO_RWND_LIMITED);
 		skb = mptcp_rcv_buf_optimization(*subsk, 1);
 		if (skb)
 			*reinject = -1;
 		else
 			return NULL;
-	}
-
-	if (!*reinject) {
-		/* this will stop any other chronos on the meta */
-		tcp_chrono_start(meta_sk, TCP_CHRONO_BUSY);
 	}
 
 	/* No splitting required, as we will only send one single segment */

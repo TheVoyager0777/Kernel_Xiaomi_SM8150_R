@@ -419,7 +419,7 @@ static void tcp_fixup_rcvbuf(struct sock *sk)
 	int rcvmem;
 
 	rcvmem = 2 * SKB_TRUESIZE(mss + MAX_TCP_HEADER) *
-		 tcp_default_init_rwnd(mss);
+		 tcp_default_init_rwnd(sock_net(sk), mss);
 
 	/* Dynamic Right Sizing (DRS) has 2 to 3 RTT latency
 	 * Allow enough cushion so that sender is not limited by our window
@@ -3694,13 +3694,17 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 	flag |= tcp_clean_rtx_queue(sk, prior_fackets, prior_snd_una, &acked,
 				    &sack_state);
 
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
 	if (mptcp(tp)) {
-		if (mptcp_handle_ack_in_infinite(sk, skb, flag)) {
+		if (mptcp_fallback_infinite(sk, flag)) {
 			pr_err("%s resetting flow\n", __func__);
 			mptcp_send_reset(sk);
 			goto invalid_ack;
 		}
+
+		mptcp_clean_rtx_infinite(skb, sk);
 	}
+#endif
 
 	if (tp->tlp_high_seq)
 		tcp_process_tlp_ack(sk, ack, flag);

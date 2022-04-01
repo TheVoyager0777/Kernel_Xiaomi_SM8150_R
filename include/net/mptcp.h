@@ -821,7 +821,7 @@ struct sock *mptcp_check_req_child(struct sock *meta_sk,
 				   struct sk_buff *skb,
 				   const struct mptcp_options_received *mopt);
 u32 __mptcp_select_window(struct sock *sk);
-void mptcp_select_initial_window(int __space, __u32 mss, __u32 *rcv_wnd,
+void mptcp_select_initial_window(struct net *net, int __space, __u32 mss, __u32 *rcv_wnd,
 					__u32 *window_clamp, int wscale_ok,
 					__u8 *rcv_wscale, __u32 init_rcv_wnd,
 					const struct sock *sk);
@@ -830,6 +830,7 @@ int mptcp_select_size(const struct sock *meta_sk, bool sg, bool first_skb);
 void mptcp_key_sha1(u64 key, u32 *token, u64 *idsn);
 void mptcp_hmac_sha1(const u8 *key_1, const u8 *key_2, u32 *hash_out,
 		     int arg_num, ...);
+void mptcp_clean_rtx_infinite(const struct sk_buff *skb, struct sock *sk);
 void mptcp_fin(struct sock *meta_sk);
 void mptcp_meta_retransmit_timer(struct sock *meta_sk);
 void mptcp_sub_retransmit_timer(struct sock *sk);
@@ -1241,6 +1242,47 @@ static inline void mptcp_sub_close_passive(struct sock *sk)
 		mptcp_sub_close(sk, 0);
 }
 
+static inline bool mptcp_fallback_infinite(struct sock *sk, int flag)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+	struct mptcp_cb *mpcb = tp->mpcb;
+
+	/* If data has been acknowleged on the meta-level, fully_established
+	 * will have been set before and thus we will not fall back to infinite
+	 * mapping.
+	 */
+	if (likely(tp->mptcp->fully_established))
+		return false;
+
+	if (!(flag & MPTCP_FLAG_DATA_ACKED))
+		return false;
+
+	/* Don't fallback twice ;) */
+	if (mpcb->infinite_mapping_snd)
+		return false;
+
+	pr_err("%s %#x will fallback - pi %d, src %pI4:%u dst %pI4:%u rcv_nxt %u from %pS\n",
+	       __func__, mpcb->mptcp_loc_token, tp->mptcp->path_index,
+	       &inet_sk(sk)->inet_saddr, ntohs(inet_sk(sk)->inet_sport),
+	       &inet_sk(sk)->inet_daddr, ntohs(inet_sk(sk)->inet_dport),
+	       tp->rcv_nxt, __builtin_return_address(0));
+	if (!is_master_tp(tp)) {
+		MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_FBACKSUB);
+		return true;
+	}
+
+	mpcb->infinite_mapping_snd = 1;
+	mpcb->infinite_mapping_rcv = 1;
+	mpcb->infinite_rcv_seq = mptcp_get_rcv_nxt_64(mptcp_meta_tp(tp));
+	tp->mptcp->fully_established = 1;
+
+	mptcp_sub_force_close_all(mpcb, sk);
+
+	MPTCP_INC_STATS(sock_net(sk), MPTCP_MIB_FBACKINIT);
+
+	return false;
+}
+
 /* Find the first index whose bit in the bit-field == 0 */
 static inline u8 mptcp_set_new_pathindex(struct mptcp_cb *mpcb)
 {
@@ -1402,9 +1444,7 @@ static inline unsigned int mptcp_current_mss(struct sock *meta_sk)
 	return 0;
 }
 static inline void mptcp_sub_close_passive(struct sock *sk) {}
-static inline bool mptcp_handle_ack_in_infinite(const struct sock *sk,
-						const struct sk_buff *skb,
-						int flag)
+static inline bool mptcp_fallback_infinite(const struct sock *sk, int flag)
 {
 	return false;
 }

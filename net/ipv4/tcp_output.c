@@ -190,14 +190,14 @@ static inline void tcp_event_ack_sent(struct sock *sk, unsigned int pkts,
 }
 
 
-u32 tcp_default_init_rwnd(u32 mss)
+u32 tcp_default_init_rwnd(struct net *net, u32 mss)
 {
 	/* Initial receive window should be twice of TCP_INIT_CWND to
 	 * enable proper sending of new unsent data during fast recovery
 	 * (RFC 3517, Section 4, NextSeg() rule (2)). Further place a
 	 * limit when mss is larger than 1460.
 	 */
-	u32 init_rwnd = TCP_INIT_CWND * 2;
+	u32 init_rwnd = net->ipv4.sysctl_tcp_default_init_rwnd;
 
 	if (mss > 1460)
 		init_rwnd = max((1460 * init_rwnd) / mss, 2U);
@@ -211,10 +211,14 @@ u32 tcp_default_init_rwnd(u32 mss)
  * be a multiple of mss if possible. We assume here that mss >= 1.
  * This MUST be enforced by all callers.
  */
-void tcp_select_initial_window(int __space, __u32 mss,
+void tcp_select_initial_window(struct net *net, int __space, __u32 mss,
 			       __u32 *rcv_wnd, __u32 *window_clamp,
 			       int wscale_ok, __u8 *rcv_wscale,
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
 			       __u32 init_rcv_wnd, const struct sock *sk)
+#else
+			       __u32 init_rcv_wnd)
+#endif
 {
 	unsigned int space = (__space < 0 ? 0 : __space);
 
@@ -254,7 +258,7 @@ void tcp_select_initial_window(int __space, __u32 mss,
 
 	if (mss > (1 << *rcv_wscale)) {
 		if (!init_rcv_wnd) /* Use default unless specified otherwise */
-			init_rcv_wnd = tcp_default_init_rwnd(mss);
+			init_rcv_wnd = tcp_default_init_rwnd(net, mss);
 		*rcv_wnd = min(*rcv_wnd, init_rcv_wnd * mss);
 	}
 
@@ -268,16 +272,25 @@ EXPORT_SYMBOL(tcp_select_initial_window);
  * value can be stuffed directly into th->window for an outgoing
  * frame.
  */
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
 u16 tcp_select_window(struct sock *sk)
+#else
+static u16 tcp_select_window(struct sock *sk)
+#endif
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	u32 old_win = tp->rcv_wnd;
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
 	/* The window must never shrink at the meta-level. At the subflow we
 	 * have to allow this. Otherwise we may announce a window too large
 	 * for the current meta-level sk_rcvbuf.
 	 */
 	u32 cur_win = tcp_receive_window_now(mptcp(tp) ? tcp_sk(mptcp_meta_sk(sk)) : tp);
 	u32 new_win = tp->ops->__select_window(sk);
+#else
+	u32 cur_win = tcp_receive_window_now(tp);
+	u32 new_win = __tcp_select_window(sk);
+#endif
 
 	/* Never shrink the offered window */
 	if (new_win < cur_win) {
@@ -293,10 +306,8 @@ u16 tcp_select_window(struct sock *sk)
 				      LINUX_MIB_TCPWANTZEROWINDOWADV);
 		new_win = ALIGN(cur_win, 1 << tp->rx_opt.rcv_wscale);
 	}
-
 	tp->rcv_wnd = new_win;
 	tp->rcv_wup = tp->rcv_nxt;
-	tcp_update_rcv_right_edge(tp);
 
 	/* Make sure we do not exceed the maximum possible
 	 * scaled window.
@@ -1648,7 +1659,11 @@ static void tcp_cwnd_application_limited(struct sock *sk)
 	tp->snd_cwnd_stamp = tcp_jiffies32;
 }
 
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+void tcp_cwnd_validate(struct sock *sk, bool is_cwnd_limited)
+#else
 static void tcp_cwnd_validate(struct sock *sk, bool is_cwnd_limited)
+#endif
 {
 	const struct tcp_congestion_ops *ca_ops = inet_csk(sk)->icsk_ca_ops;
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -1684,11 +1699,8 @@ static void tcp_cwnd_validate(struct sock *sk, bool is_cwnd_limited)
 		 * 2) not cwnd limited (this else condition)
 		 * 3) no more data to send (null tcp_send_head )
 		 * 4) application is hitting buffer limit (SOCK_NOSPACE)
-		 * 5) For MPTCP subflows, the scheduler determines
-		 *    sndbuf limited.
 		 */
 		if (!tcp_send_head(sk) && sk->sk_socket &&
-		    !(mptcp(tcp_sk(sk)) && !is_meta_sk(sk)) &&
 		    test_bit(SOCK_NOSPACE, &sk->sk_socket->flags) &&
 		    (1 << sk->sk_state) & (TCPF_ESTABLISHED | TCPF_CLOSE_WAIT))
 			tcp_chrono_start(sk, TCP_CHRONO_SNDBUF_LIMITED);
@@ -3430,13 +3442,23 @@ static void tcp_connect_init(struct sock *sk)
 	if (rcv_wnd == 0)
 		rcv_wnd = dst_metric(dst, RTAX_INITRWND);
 
-	tp->ops->select_initial_window(tcp_full_space(sk),
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
+	tp->ops->select_initial_window(sock_net(sk), tcp_full_space(sk),
 				       tp->advmss - (tp->rx_opt.ts_recent_stamp ? tp->tcp_header_len - sizeof(struct tcphdr) : 0),
 				       &tp->rcv_wnd,
 				       &tp->window_clamp,
 				       sock_net(sk)->ipv4.sysctl_tcp_window_scaling,
 				       &rcv_wscale,
 				       rcv_wnd, sk);
+#else
+	tcp_select_initial_window(sock_net(sk), tcp_full_space(sk),
+				  tp->advmss - (tp->rx_opt.ts_recent_stamp ? tp->tcp_header_len - sizeof(struct tcphdr) : 0),
+				  &tp->rcv_wnd,
+				  &tp->window_clamp,
+				  sock_net(sk)->ipv4.sysctl_tcp_window_scaling,
+				  &rcv_wscale,
+				  rcv_wnd);
+#endif
 
 	tp->rx_opt.rcv_wscale = rcv_wscale;
 	tp->rcv_ssthresh = tp->rcv_wnd;

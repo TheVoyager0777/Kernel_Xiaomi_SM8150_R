@@ -381,6 +381,7 @@ extern const struct tcp_request_sock_ops tcp_request_sock_ipv6_ops;
 struct mptcp_options_received;
 
 void tcp_cleanup_rbuf(struct sock *sk, int copied);
+void tcp_cwnd_validate(struct sock *sk, bool is_cwnd_limited);
 int tcp_close_state(struct sock *sk);
 void tcp_minshall_update(struct tcp_sock *tp, unsigned int mss_now,
 			 const struct sk_buff *skb);
@@ -1499,7 +1500,7 @@ static inline void tcp_sack_reset(struct tcp_options_received *rx_opt)
 	rx_opt->num_sacks = 0;
 }
 
-u32 tcp_default_init_rwnd(u32 mss);
+u32 tcp_default_init_rwnd(struct net *net, u32 mss);
 void tcp_cwnd_restart(struct sock *sk, s32 delta);
 
 static inline void tcp_slow_start_after_idle_check(struct sock *sk)
@@ -1517,10 +1518,15 @@ static inline void tcp_slow_start_after_idle_check(struct sock *sk)
 }
 
 /* Determine a window scaling and initial window to offer. */
-void tcp_select_initial_window(int __space, __u32 mss, __u32 *rcv_wnd,
+void tcp_select_initial_window(struct net *net,
+			       int __space, __u32 mss, __u32 *rcv_wnd,
 			       __u32 *window_clamp, int wscale_ok,
+#ifdef CONFIG_LGP_DATA_TCPIP_MPTCP
 			       __u8 *rcv_wscale, __u32 init_rcv_wnd,
 			       const struct sock *sk);
+#else
+			       __u8 *rcv_wscale, __u32 init_rcv_wnd);
+#endif
 
 static inline int tcp_win_from_space(int space)
 {
@@ -2108,7 +2114,7 @@ struct tcp_sock_af_ops {
 struct tcp_sock_ops {
 	u32 (*__select_window)(struct sock *sk);
 	u16 (*select_window)(struct sock *sk);
-	void (*select_initial_window)(int __space, __u32 mss, __u32 *rcv_wnd,
+	void (*select_initial_window)(struct net *net, int __space, __u32 mss, __u32 *rcv_wnd,
 				      __u32 *window_clamp, int wscale_ok,
 				      __u8 *rcv_wscale, __u32 init_rcv_wnd,
 				      const struct sock *sk);
