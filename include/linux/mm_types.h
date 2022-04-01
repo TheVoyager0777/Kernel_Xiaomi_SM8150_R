@@ -640,7 +640,7 @@ struct vm_fault;
  *
  * Page fault handlers return a bitmask of %VM_FAULT values.
  */
-typedef __bitwise unsigned int vm_fault_t;
+typedef __bitwise int vm_fault_t;
 
 /**
  * enum vm_fault_reason - Page fault handlers return a bitmask of
