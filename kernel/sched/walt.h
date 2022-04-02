@@ -73,6 +73,19 @@ extern void update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 
 extern unsigned int walt_big_tasks(int cpu);
 
+struct walt_task_group {
+	/*
+	 * Controls whether tasks of this cgroup should be colocated with each
+	 * other and tasks of other cgroups that have the same flag turned on.
+	 */
+	bool colocate;
+	/*
+	 * array indicating whether this task group participates in the
+	 * particular boost type
+	 */
+	bool sched_boost_enable[MAX_NUM_BOOST_TYPE];
+};
+
 static inline void
 inc_nr_big_task(struct walt_sched_stats *stats, struct task_struct *p)
 {
