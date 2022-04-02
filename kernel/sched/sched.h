@@ -2592,21 +2592,6 @@ static inline bool uclamp_latency_sensitive(struct task_struct *p)
 	return tg->latency_sensitive;
 }
 
-static inline bool uclamp_boosted(struct task_struct *p)
-{
-	struct cgroup_subsys_state *css = task_css(p, cpuset_cgrp_id);
-	struct task_group *tg;
-
-	if (!css)
-		return false;
-
-	if (!strlen(css->cgroup->kn->name))
-		return 0;
-
-	tg = container_of(css, struct task_group, css);
-
-	return tg->boosted;
-}
 #else
 static inline bool uclamp_latency_sensitive(struct task_struct *p)
 {
