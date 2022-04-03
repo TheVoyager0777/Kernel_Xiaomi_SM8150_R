@@ -17,6 +17,7 @@
 #ifdef CONFIG_SCHED_WALT
 
 #include <linux/sched/sysctl.h>
+#include <linux/sched/walt.h>
 #include <linux/sched/core_ctl.h>
 
 #define MAX_NR_CLUSTERS			3
@@ -266,6 +267,27 @@ static inline bool uclamp_boosted(struct task_struct *p)
 }
 #endif
 
+static inline unsigned long task_util_est(struct task_struct *p)
+{
+	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+
+	return wts->demand_scaled;
+}
+
+#ifdef CONFIG_UCLAMP_TASK
+static inline unsigned long uclamp_task_util(struct task_struct *p)
+{
+	return clamp(task_util_est(p),
+		     uclamp_eff_value(p, UCLAMP_MIN),
+		     uclamp_eff_value(p, UCLAMP_MAX));
+}
+#else
+static inline unsigned long uclamp_task_util(struct task_struct *p)
+{
+	return task_util_est(p);
+}
+#endif
+
 static inline unsigned int cpu_cur_freq(int cpu)
 {
 	return cpu_rq(cpu)->cluster->cur_freq;
@@ -375,6 +397,23 @@ extern bool is_rtgb_active(void);
 extern u64 get_rtgb_active_time(void);
 #define SCHED_PRINT(arg)        printk_deferred("%s=%llu", #arg, arg)
 #define STRG(arg)               #arg
+
+static inline bool task_fits_capacity(struct task_struct *p,
+					long capacity,
+					int cpu)
+{
+	unsigned int margin;
+
+	/*
+	 * Derive upmigration/downmigrate margin wrt the src/dest CPU.
+	 */
+	if (capacity_orig_of(task_cpu(p)) > capacity_orig_of(cpu))
+		margin = sched_capacity_margin_down[cpu];
+	else
+		margin = sched_capacity_margin_up[task_cpu(p)];
+
+	return capacity * 1024 > uclamp_task_util(p) * margin;
+}
 
 static inline void walt_task_dump(struct task_struct *p)
 {

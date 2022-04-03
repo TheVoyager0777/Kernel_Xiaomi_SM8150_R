@@ -79,6 +79,13 @@ walt_dec_cfs_rq_stats(struct cfs_rq *cfs_rq, struct task_struct *p) {}
 #endif
 
 /*
+ * The margin used when comparing utilization with CPU capacity.
+ *
+ * (default: ~20%)
+ */
+#define fits_capacity(cap, max)	((cap) * 1280 < (max) * 1024)
+
+/*
  * Targeted preemption latency for CPU-bound tasks:
  *
  * NOTE: this latency value is not the same as the concept of
@@ -3727,9 +3734,6 @@ static inline unsigned long cfs_rq_load_avg(struct cfs_rq *cfs_rq)
 
 static int idle_balance(struct rq *this_rq, struct rq_flags *rf);
 
-static inline bool task_fits_capacity(struct task_struct *p, long capacity,
-								int cpu);
-
 static inline void update_misfit_status(struct task_struct *p, struct rq *rq)
 {
 	if (!static_branch_unlikely(&sched_asym_cpucapacity))
@@ -3753,14 +3757,6 @@ static inline unsigned long _task_util_est(struct task_struct *p)
 	struct util_est ue = READ_ONCE(p->se.avg.util_est);
 
 	return max(ue.ewma, ue.enqueued);
-}
-
-static inline unsigned long task_util_est(struct task_struct *p)
-{
-#ifdef CONFIG_SCHED_WALT
-	return p->ravg.demand_scaled;
-#endif
-	return max(task_util(p), _task_util_est(p));
 }
 
 static inline void util_est_enqueue(struct cfs_rq *cfs_rq,
@@ -7350,24 +7346,6 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	return select_idle_sibling_cstate_aware(p, prev, target);
 }
 
-static inline bool task_fits_capacity(struct task_struct *p,
-					long capacity,
-					int cpu)
-{
-	unsigned int margin;
-
-	/*
-	 * Derive upmigration/downmigrate margin wrt the src/dest
-	 * CPU.
-	 */
-	if (capacity_orig_of(task_cpu(p)) > capacity_orig_of(cpu))
-		margin = sched_capacity_margin_down[cpu];
-	else
-		margin = sched_capacity_margin_up[task_cpu(p)];
-
-	return capacity * 1024 > boosted_task_util(p) * margin;
-}
-
 static inline bool task_fits_max(struct task_struct *p, int cpu)
 {
         struct root_domain *rd;
@@ -7514,7 +7492,7 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 				   bool prefer_idle,
 				   struct find_best_target_env *fbt_env)
 {
-	unsigned long min_util = boosted_task_util(p);
+	unsigned long min_util = uclamp_task_util(p);
 	unsigned long target_capacity = ULONG_MAX;
 	unsigned long min_wake_util = ULONG_MAX;
 	unsigned long target_max_spare_cap = 0;

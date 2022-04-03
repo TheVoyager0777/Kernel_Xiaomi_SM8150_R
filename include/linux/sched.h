@@ -27,6 +27,7 @@
 #include <linux/signal_types.h>
 #include <linux/mm_types_task.h>
 #include <linux/task_io_accounting.h>
+#include <linux/android_vendor.h>
 #include <linux/pkg_stat.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
@@ -1458,6 +1459,9 @@ struct task_struct {
 		atomic_t running;
 		bool free_stack;
 	} async_free;
+
+	ANDROID_VENDOR_DATA_ARRAY(1, 64);
+	ANDROID_OEM_DATA_ARRAY(1, 32);
 
 	/*
 	 * New fields for task_struct should be added above here, so that
