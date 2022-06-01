@@ -11,6 +11,7 @@ struct cpu_topology {
 	cpumask_t thread_sibling;
 	cpumask_t core_sibling;
 	cpumask_t core_possible_sibling;
+	cpumask_t android_vendor_data1;
 };
 
 extern struct cpu_topology cpu_topology[NR_CPUS];
