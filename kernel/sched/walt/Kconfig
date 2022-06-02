@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# QTI WALT based scheduler
+#
+menu "QTI WALT based scheduler features"
+
+config SCHED_WALT_ENHANCED
+        default y
+	tristate "Support window based load tracking"
+	depends on SMP
+	help
+	This feature will allow the scheduler to maintain a tunable window
+	based set of metrics for tasks and runqueues. These metrics can be
+	used to guide task placement as well as task frequency requirements
+	for cpufreq governors.
+
+endmenu

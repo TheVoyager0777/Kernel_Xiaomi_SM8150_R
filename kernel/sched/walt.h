@@ -72,6 +72,24 @@ extern void update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 						u64 wallclock, u64 irqtime);
 
 extern unsigned int walt_big_tasks(int cpu);
+/* 1ms default for 20ms window size scaled to 1024 */
+extern unsigned int sysctl_sched_min_task_util_for_boost;
+extern unsigned int sysctl_sched_min_task_util_for_uclamp;
+/* 0.68ms default for 20ms window size scaled to 1024 */
+extern unsigned int sysctl_sched_min_task_util_for_colocation;
+
+struct walt_task_group {
+	/*
+	 * Controls whether tasks of this cgroup should be colocated with each
+	 * other and tasks of other cgroups that have the same flag turned on.
+	 */
+	bool colocate;
+	/*
+	 * array indicating whether this task group participates in the
+	 * particular boost type
+	 */
+	bool sched_boost_enable[MAX_NUM_BOOST_TYPE];
+};
 
 static inline void
 inc_nr_big_task(struct walt_sched_stats *stats, struct task_struct *p)
@@ -239,6 +257,14 @@ static inline u32 cpu_cycles_to_freq(u64 cycles, u64 period)
 {
 	return div64_u64(cycles, period);
 }
+
+#ifdef CONFIG_UCLAMP_TASK_GROUP
+static inline bool uclamp_boosted(struct task_struct *p)
+{
+    return ((uclamp_eff_value(p, UCLAMP_MIN) > 0) &&
+			(task_util(p) > sysctl_sched_min_task_util_for_uclamp));
+}
+#endif
 
 static inline unsigned int cpu_cur_freq(int cpu)
 {

@@ -209,6 +209,14 @@ struct signal_struct {
 	struct tty_audit_buf *tty_audit_buf;
 #endif
 
+#ifdef CONFIG_HSWAP
+	short reclaimed;
+	int reclaim_efficiency;
+	short top_count;
+	long top_time;
+	unsigned long before_time;
+#endif
+
 	/*
 	 * Thread is the potential origin of an oom condition; kill first on
 	 * oom

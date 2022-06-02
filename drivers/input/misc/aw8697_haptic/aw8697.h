@@ -40,8 +40,8 @@
 
 #define HAPTIC_MAX_TIMEOUT                  10000
 
-#define AW8697_VBAT_REFER                   4200
-#define AW8697_VBAT_MIN                     3000
+#define AW8697_VBAT_REFER                   4150
+#define AW8697_VBAT_MIN                     3500
 #define AW8697_VBAT_MAX                     4500
 #define ENABLE_PIN_CONTROL
 
@@ -345,7 +345,6 @@ struct aw8697 {
 	unsigned char activate_mode;
 
 	unsigned char auto_boost;
-	unsigned char wk_lock_flag;
 
 	int state;
 	int duration;

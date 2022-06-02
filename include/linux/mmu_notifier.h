@@ -25,6 +25,17 @@ struct mmu_notifier_mm {
 	spinlock_t lock;
 };
 
+#define MMU_NOTIFIER_RANGE_BLOCKABLE (1 << 0)
+
+struct mmu_notifier_range {
+	struct vm_area_struct *vma;
+	struct mm_struct *mm;
+	unsigned long start;
+	unsigned long end;
+	unsigned flags;
+	enum mmu_notifier_event event;
+};
+
 struct mmu_notifier_ops {
 	/*
 	 * Called either by mmu_notifier_unregister or when the mm is
@@ -288,6 +299,22 @@ static inline void mmu_notifier_mm_destroy(struct mm_struct *mm)
 		__mmu_notifier_mm_destroy(mm);
 }
 
+static inline void mmu_notifier_range_init(struct mmu_notifier_range *range,
+					   enum mmu_notifier_event event,
+					   unsigned flags,
+					   struct vm_area_struct *vma,
+					   struct mm_struct *mm,
+					   unsigned long start,
+					   unsigned long end)
+{
+	range->vma = vma;
+	range->event = event;
+	range->mm = mm;
+	range->start = start;
+	range->end = end;
+	range->flags = flags;
+}
+
 #define ptep_clear_flush_young_notify(__vma, __address, __ptep)		\
 ({									\
 	int __young;							\
@@ -400,6 +427,22 @@ extern void mmu_notifier_call_srcu(struct rcu_head *rcu,
 extern void mmu_notifier_synchronize(void);
 
 #else /* CONFIG_MMU_NOTIFIER */
+
+struct mmu_notifier_range {
+	unsigned long start;
+	unsigned long end;
+};
+
+static inline void _mmu_notifier_range_init(struct mmu_notifier_range *range,
+					    unsigned long start,
+					    unsigned long end)
+{
+	range->start = start;
+	range->end = end;
+}
+
+#define mmu_notifier_range_init(range,event,flags,vma,mm,start,end)  \
+	_mmu_notifier_range_init(range, start, end)
 
 static inline int mm_has_notifiers(struct mm_struct *mm)
 {

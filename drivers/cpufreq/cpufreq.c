@@ -670,12 +670,14 @@ static bool should_use_cached_freq(int cpu)
 	if (!cpuinfo_max_freq_cached)
 		return false;
 
+#ifndef CONFIG_CPUINFO_CACHED_FREQ_TASKS
 	/*
 	 * perfd already configure sched_lib_mask_force to
 	 * 0xf0 from user space. so re-using it.
 	 */
 	if (!(BIT(cpu) & sched_lib_mask_force))
 		return false;
+#endif
 
 	return is_sched_lib_based_app(current->pid);
 }
@@ -2320,6 +2322,7 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 		ret = cpufreq_start_governor(policy);
 		if (!ret) {
 			pr_debug("cpufreq: governor change\n");
+			sched_cpufreq_governor_change(policy, old_gov);
 			return 0;
 		}
 		cpufreq_exit_governor(policy);

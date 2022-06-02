@@ -453,7 +453,7 @@ static ssize_t dsi_bridge_disp_count_get(struct drm_bridge *bridge, char *buf)
 	return ret;
 }
 
-int dsi_panel_set_doze_backlight(struct dsi_display *display, u32 bl_lvl);
+int dsi_panel_set_doze_backlight(struct dsi_display *display);
 
 ssize_t dsi_panel_get_doze_backlight(struct dsi_display *display, char *buf);
 
@@ -462,7 +462,6 @@ int dsi_bridge_disp_set_doze_backlight(struct drm_connector *connector,
 {
 	struct dsi_display *display = NULL;
 	struct dsi_bridge *c_bridge = NULL;
-	u32 bl_lvl;
 
 	if (!connector || !connector->encoder || !connector->encoder->bridge) {
 		pr_err("Invalid connector/encoder/bridge ptr\n");
@@ -477,7 +476,7 @@ int dsi_bridge_disp_set_doze_backlight(struct drm_connector *connector,
 	} else
 		display->drm_dev->doze_brightness = doze_backlight;
 
-	return dsi_panel_set_doze_backlight(display, bl_lvl);
+	return dsi_panel_set_doze_backlight(display);
 }
 
 ssize_t dsi_bridge_disp_get_doze_backlight(struct drm_connector *connector,

@@ -113,8 +113,11 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 		bl_lvl = 0;
 	}
 
-	if (display->panel->bl_config.bl_update ==
-		BL_UPDATE_DELAY_UNTIL_FIRST_FRAME && !c_conn->allow_bl_update) {
+	if (bl_lvl && bl_lvl < display->panel->bl_config.bl_min_level
+		&& !display->panel->bl_config.bl_remap_flag)
+		bl_lvl = display->panel->bl_config.bl_min_level;
+
+	if (!c_conn->allow_bl_update) {
 		c_conn->unset_bl_level = bl_lvl;
 		return 0;
 	}
@@ -793,7 +796,7 @@ int sde_connector_update_hbm(struct sde_connector *c_conn)
 		if (!dsi_display->panel->fod_dimlayer_hbm_enabled) {
 			SDE_ATRACE_BEGIN("set_hbm_on");
 			mutex_lock(&dsi_display->panel->panel_lock);
-                        {
+			if (dsi_display->panel->bl_config.samsung_prepare_hbm_flag) {
 				pr_info("fod set dimming on\n");
 				rc = dsi_display_write_panel(dsi_display, &dsi_display->panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_DISP_DIMMINGON]);
 
@@ -840,7 +843,7 @@ int sde_connector_update_hbm(struct sde_connector *c_conn)
 			if (dsi_display->drm_dev
 					&& ((dsi_display->drm_dev->doze_state == DRM_BLANK_LP1) || (dsi_display->drm_dev->doze_state == DRM_BLANK_LP2))) {
 				pr_info("aod to HBM\n");
-				if (dsi_display->panel->f4_51_ctrl_flag || dsi_display->panel->bl_config.xiaomi_f4_41_flag || dsi_display->panel->bl_config.dcs_type_ss) {
+				if (dsi_display->panel->f4_51_ctrl_flag || dsi_display->panel->bl_config.xiaomi_f4_41_flag) {
 					sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_TX_COMPLETE);
 					dsi_display->panel->hbm_ntfy_skip_flag = 4;
 				}

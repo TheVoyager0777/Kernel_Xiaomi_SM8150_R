@@ -20,7 +20,6 @@
 #define ida_free ida_remove
 
 typedef unsigned int __poll_t;
-typedef __bitwise int vm_fault_t;
 
 struct binder_context {
 	struct binder_node *binder_context_mgr_node;
