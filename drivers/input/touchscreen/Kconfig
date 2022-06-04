@@ -1408,13 +1408,6 @@ config TOUCHSCREEN_HIMAX_CHIPSET
 
 source "drivers/input/touchscreen/hxchipset/Kconfig"
 
-config SPI_XIAOMI_TP
-	bool
-	depends on SPI
-	default y if TOUCHSCREEN_NT36xxx_HOSTDL_SPI
-	help
-	Say Y if want use xiaomi touch panel.
-
 config TOUCHSCREEN_SYNAPTICS_DSX
         bool "Synaptics DSX Touchscreen Driver"
         depends on I2C
@@ -1443,14 +1436,6 @@ config TOUCHSCREEN_RAYDIUM_CHIPSET
 
 	  If unsure, say N.
 
-config TOUCHSCREEN_NT36XXX
-        bool "nt36xxx Touchscreen Driver"
-        depends on I2C
-        help
-          Say Y here if you have a nt36xxx Touchscreen.
-
-          If unsure, say N.
-
-source "drivers/input/touchscreen/nt36xxx/Kconfig"
-
+config TOUCHSCREEN_MI_DAVINCI_DOUBLE_CLICK
+	bool "Double Click Driver port from Xiaomi"
 endif

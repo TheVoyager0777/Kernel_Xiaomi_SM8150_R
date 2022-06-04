@@ -210,15 +210,6 @@ config TOUCH_COUNT_DUMP
 	depends on LAST_TOUCH_EVENTS
 	---help---
 		Say Y here if you want to get last touch events.
-
-comment "Input Device Drivers"
-
-config TOUCH_COUNT_DUMP
-	bool "Touch cout dump"
-	default n
-	depends on LAST_TOUCH_EVENTS
-	---help---
-		Say Y here if you want to get last touch events.
 		
 comment "Input Device Drivers"
 

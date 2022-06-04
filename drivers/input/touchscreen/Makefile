@@ -117,3 +117,4 @@ obj-$(CONFIG_MACH_XIAOMI_CEPHEUS) += xiaomi/
 obj-$(CONFIG_MACH_XIAOMI_RAPHAEL) += xiaomi/
 obj-$(CONFIG_MACH_XIAOMI_CRUX) += xiaomi_crux/
 obj-$(CONFIG_TOUCHSCREEN_GOODIX_GTX8) += goodix_driver_gt9886/
+obj-$(CONFIG_TOUCHSCREEN_MI_DAVINCI_DOUBLE_CLICK) += double_click.o
