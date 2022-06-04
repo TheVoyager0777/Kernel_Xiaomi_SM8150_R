@@ -546,7 +546,6 @@ struct dsi_split_link_config {
  * @ignore_rx_eot:       Ignore Rx EOT packets if set to true.
  * @append_tx_eot:       Append EOT packets for forward transmissions if set to
  *                       true.
- * @ext_bridge_mode:     External bridge is connected.
  * @ext_bridge_num:      Connected external bridge count.
  * @ext_bridge_map:      External bridge config reg needs to match with the port
  *                       reg config.
@@ -572,7 +571,6 @@ struct dsi_host_common_cfg {
 	bool t_clk_pre_extend;
 	bool ignore_rx_eot;
 	bool append_tx_eot;
-	bool ext_bridge_mode;
 	u32 ext_bridge_num;
 	u32 ext_bridge_map[MAX_DSI_CTRLS_PER_DISPLAY];
 	bool force_hs_clk_lane;

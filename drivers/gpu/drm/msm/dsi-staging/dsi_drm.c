@@ -420,39 +420,6 @@ static int dsi_bridge_get_panel_info(struct drm_bridge *bridge, char *buf)
 	return rc;
 }
 
-int dsi_panel_disp_count_set(struct dsi_display *display, const char *buf);
-static void dsi_bridge_disp_count_set(struct drm_bridge *bridge, const char *buf)
-{
-	int rc = 0;
-	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
-
-	if (!c_bridge) {
-		pr_err("Invalid params\n");
-		return;
-	}
-
-	rc = dsi_panel_disp_count_set(c_bridge->display, buf);
-	if (rc) {
-		pr_err("[%d] DSI disp count set failed, rc=%d\n",
-		       c_bridge->id, rc);
-	}
-}
-
-ssize_t dsi_panel_disp_count_get(struct dsi_display *display, char *buf);
-static ssize_t dsi_bridge_disp_count_get(struct drm_bridge *bridge, char *buf)
-{
-	ssize_t ret = 0;
-	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
-
-	if (!c_bridge) {
-		pr_err("Invalid params\n");
-		return 0;
-	}
-
-	ret = dsi_panel_disp_count_get(c_bridge->display, buf);
-	return ret;
-}
-
 int dsi_panel_set_doze_backlight(struct dsi_display *display);
 
 ssize_t dsi_panel_get_doze_backlight(struct dsi_display *display, char *buf);
@@ -851,8 +818,6 @@ static const struct drm_bridge_funcs dsi_bridge_ops = {
 	.disp_param_set = dsi_bridge_disp_param_set,
 	.disp_param_get = dsi_bridge_disp_param_get,
 	.disp_get_panel_info = dsi_bridge_get_panel_info,
-	.disp_count_set = dsi_bridge_disp_count_set,
-	.disp_count_get = dsi_bridge_disp_count_get,
 };
 
 int dsi_conn_set_info_blob(struct drm_connector *connector,
