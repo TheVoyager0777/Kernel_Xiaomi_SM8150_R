@@ -90,9 +90,9 @@ extern struct frame_stat fm_stat;
 struct dsi_panel *g_panel;
 int panel_disp_param_send_lock(struct dsi_panel *panel, int param);
 int dsi_display_read_panel(struct dsi_panel *panel, struct dsi_read_config *read_config);
+static void dsi_panel_count(struct dsi_panel *panel, int enable);
 #if DSI_READ_WRITE_PANEL_DEBUG
 static int string_merge_into_buf(const char *str, int len, char *buf);
-static void dsi_panel_count(struct dsi_panel *panel, int enable);
 static struct dsi_read_config read_reg;
 static struct proc_dir_entry *mipi_proc_entry;
 #define MIPI_PROC_NAME "mipi_reg"
@@ -1044,9 +1044,7 @@ int dsi_panel_set_backlight(struct dsi_panel *panel, u32 bl_lvl)
 		}
 		dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_DIMMINGOFF);
 	}
-	
-	dsi_panel_bl_count(panel, bl_lvl);
-	
+
 	switch (bl->type) {
 	case DSI_BACKLIGHT_WLED:
 		rc = backlight_device_set_brightness(bl->raw_bd, bl_lvl);
@@ -5029,8 +5027,6 @@ int dsi_panel_set_lp1(struct dsi_panel *panel)
 	}
 	pr_info("%s\n", __func__);
 	mutex_lock(&panel->panel_lock);
-	if (panel->panel_active_count_enable)
-		dsi_panel_count(panel, 0);
 	if (!panel->panel_initialized)
 		goto exit;
 
@@ -5066,8 +5062,6 @@ int dsi_panel_set_lp2(struct dsi_panel *panel)
 	}
 	pr_info("%s\n", __func__);
 	mutex_lock(&panel->panel_lock);
-	if (panel->panel_active_count_enable)
-		dsi_panel_count(panel, 0);
 
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_LP2);
 	if (rc)
@@ -5122,9 +5116,6 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 	} else
 		pr_info("%s skip\n", __func__);
 
-	if (!panel->panel_active_count_enable)
-		dsi_panel_count(panel, 1);
-		
 	if (!panel->oled_panel_video_mode)
 		panel->in_aod = false;
 
@@ -6345,63 +6336,26 @@ int dsi_panel_post_switch(struct dsi_panel *panel)
 int dsi_panel_enable(struct dsi_panel *panel)
 {
 	int rc = 0;
-	u32 count = 0;
 
 	if (!panel) {
 		pr_err("Invalid params\n");
 		return -EINVAL;
 	}
 
-	count = panel->cur_mode->priv_info->cmd_sets[DSI_CMD_SET_DISP_BC_120HZ].count;
-
 	mutex_lock(&panel->panel_lock);
 
 	if (!panel->panel_active_count_enable)
 		dsi_panel_count(panel, 1);
-		
+
 	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_ON);
-	if (rc)
+	if (rc){
 		pr_err("[%s] failed to send DSI_CMD_SET_ON cmds, rc=%d\n",
 		       panel->name, rc);
-	else
-		panel->panel_initialized = true;
-
-	if (count && (panel->cur_mode->timing.refresh_rate == 120)) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_BC_120HZ);
-		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_DISP_BC_120HZ cmd, rc=%d\n",
-					panel->name, rc);
 	}
-
-	if (panel->bl_config.xiaomi_f4_41_flag && panel->dc_enable && panel->dc_demura_threshold) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_DC_ON);
-		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_DISP_DC_ON cmd, rc=%d\n",
-					panel->name, rc);
-	}
-
-	if (panel->bl_config.xiaomi_f4_36_flag && panel->dc_enable) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_DC_ON);
-		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_DISP_DC_ON cmd, rc=%d\n",
-					panel->name, rc);
-	}
-	if (panel->dc_type == 0 && panel->dc_enable) {
-		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_DISP_DC_ON);
-		if (rc)
-			pr_err("[%s] failed to send DSI_CMD_SET_DISP_DC_ON cmd, rc=%d\n",
-			panel->name, rc);
-	}
-
-
-	panel->hbm_enabled = false;
+	panel->panel_initialized = true;
 	panel->fod_hbm_enabled = false;
-	panel->fod_dimlayer_hbm_enabled = false;
 	panel->in_aod = false;
-	panel->backlight_pulse_flag = false;
-	panel->backlight_demura_level = 0;
 	panel->skip_dimmingon = STATE_NONE;
-	idle_status = false;
 
 	mutex_unlock(&panel->panel_lock);
 	pr_info("[SDE] %s: DSI_CMD_SET_ON\n", __func__);
@@ -6467,16 +6421,6 @@ int dsi_panel_disable(struct dsi_panel *panel)
 	/* Avoid sending panel off commands when ESD recovery is underway */
 	if (!atomic_read(&panel->esd_recovery_pending)) {
 		panel->panel_initialized = false;
-		/*
-		 * Need to set IBB/AB regulator mode to STANDBY,
-		 * if panel is going off from AOD mode.
-		 */
-		if (dsi_panel_is_type_oled(panel) &&
-		      (panel->power_mode == SDE_MODE_DPMS_LP1 ||
-		       panel->power_mode == SDE_MODE_DPMS_LP2))
-			dsi_pwr_panel_regulator_mode_set(&panel->power_info,
-				"ibb", REGULATOR_MODE_STANDBY);
-
 		rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_SET_OFF);
 		if (rc) {
 			/*
@@ -6490,27 +6434,24 @@ int dsi_panel_disable(struct dsi_panel *panel)
 			rc = 0;
 		}
 	}
-	
+
 	if (panel->panel_active_count_enable)
 		dsi_panel_count(panel, 0);
 
-	panel->panel_initialized = false;
-	panel->power_mode = SDE_MODE_DPMS_OFF;
+	dsi_panel_HBM_count(panel, 0, 1);
 
+	panel->panel_initialized = false;
 	panel->skip_dimmingon = STATE_NONE;
 	panel->fod_hbm_enabled = false;
-	panel->hbm_enabled = false;
-	panel->fod_dimlayer_hbm_enabled = false;
 	panel->in_aod = false;
-	panel->backlight_pulse_flag = false;
-	panel->backlight_demura_level = 0;
 	panel->fod_backlight_flag = false;
+	panel->dc_enable = false;
 
 	mutex_unlock(&panel->panel_lock);
-
 	pr_info("[SDE] %s: DSI_CMD_SET_OFF\n", __func__);
 	return rc;
 }
+
 
 int dsi_panel_unprepare(struct dsi_panel *panel)
 {
