@@ -768,7 +768,7 @@ static int dsi_panel_update_backlight(struct dsi_panel *panel,
 
 	rc = mipi_dsi_dcs_set_display_brightness(dsi, bl_lvl);
 
-	if (panel->bl_config.dcs_type_ss || panel->bl_config.dcs_type_ss_ea || panel->bl_config.dcs_type_ss_eb)
+	if (panel->bl_config.dcs_type_ss_ea || panel->bl_config.dcs_type_ss_eb)
 		rc = mipi_dsi_dcs_set_display_brightness_ss(dsi, bl_temp);
 
 	/* For the f4_41 panel, we need to switch the DEMURA_LEVEL according to the value of the 51 register. */
@@ -2721,8 +2721,6 @@ static int dsi_panel_parse_bl_config(struct dsi_panel *panel)
 		panel->bl_config.type = DSI_BACKLIGHT_UNKNOWN;
 	}
 
-	panel->bl_config.dcs_type_ss = utils->read_bool(utils->data,
-							"qcom,mdss-dsi-bl-dcs-type-ss");
 	panel->bl_config.dcs_type_ss_ea = utils->read_bool(utils->data,
 								"qcom,mdss-dsi-bl-dcs-type-ss-ea");
 
@@ -5045,7 +5043,7 @@ int dsi_panel_set_nolp(struct dsi_panel *panel)
 		panel->in_aod = false;
 
 	if (!panel->oled_panel_video_mode &&
-		(panel->bl_config.dcs_type_ss || panel->bl_config.dcs_type_ss_eb || panel->bl_config.xiaomi_f4_36_flag ||panel->bl_config.xiaomi_f4_41_flag)) {
+		(panel->bl_config.dcs_type_ss_eb || panel->bl_config.xiaomi_f4_36_flag ||panel->bl_config.xiaomi_f4_41_flag)) {
 		rc = dsi_panel_set_backlight(panel, panel->last_bl_lvl);
 	}
 
@@ -5740,12 +5738,6 @@ int panel_disp_param_send_lock(struct dsi_panel *panel, int param)
 				pr_info("FOD ea\n");
 			}
 		} else if (panel->bl_config.dcs_type_ss_eb) {
-			pr_info("FOD eb\n");
-			if (fod_backlight == 0x690)
-				fod_backlight = 4090;
-			else if (fod_backlight == 0x7FF)
-				fod_backlight = 4090;
-		} else if (panel->bl_config.dcs_type_ss) {
 			pr_info("FOD eb\n");
 			if (fod_backlight == 0x690)
 				fod_backlight = 4090;
