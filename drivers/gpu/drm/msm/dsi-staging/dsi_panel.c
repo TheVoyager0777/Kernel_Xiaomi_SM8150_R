@@ -74,7 +74,7 @@
 #define DAY_SECS (60*60*24)
 #define XY_COORDINATE_NUM    2
 #define MAX_LUMINANCE_NUM    2
-
+static struct dsi_read_config g_dsi_read_cfg;
 static struct dsi_panel *g_panel;
 int dsi_display_read_panel(struct dsi_panel *panel, struct dsi_read_config *read_config);
 
@@ -6132,6 +6132,178 @@ exit_ctrl:
 		DSI_ALL_CLKS, DSI_CLK_OFF);
 
 	return rc;
+}
+
+ssize_t dsi_panel_mipi_reg_write(struct dsi_panel *panel,
+				char *buf, size_t count)
+{
+	struct dsi_panel_cmd_set cmd_sets = {0};
+	int retval = 0, dlen = 0;
+	u32 packet_count = 0;
+	char *token, *input_copy, *input_dup = NULL;
+	const char *delim = " ";
+	char *buffer = NULL;
+	u32 buf_size = 0;
+	u32 tmp_data = 0;
+
+	mutex_lock(&panel->panel_lock);
+
+	if (!panel || !panel->panel_initialized) {
+		pr_err("[LCD] panel not ready!\n");
+		retval = -EAGAIN;
+		goto exit_unlock;
+	}
+
+	pr_debug("input buffer:{%s}\n", buf);
+
+	input_copy = kstrdup(buf, GFP_KERNEL);
+	if (!input_copy) {
+		retval = -ENOMEM;
+		goto exit_unlock;
+	}
+
+	input_dup = input_copy;
+	/* removes leading and trailing whitespace from input_copy */
+	input_copy = strim(input_copy);
+
+	/* Split a string into token */
+	token = strsep(&input_copy, delim);
+	if (token) {
+		retval = kstrtoint(token, 10, &tmp_data);
+		if (retval) {
+			pr_err("input buffer conversion failed\n");
+			goto exit_free0;
+		}
+		g_dsi_read_cfg.enabled= !!tmp_data;
+	}
+
+	/* Removes leading whitespace from input_copy */
+	if (input_copy)
+		input_copy = skip_spaces(input_copy);
+	else
+		goto exit_free0;
+
+	token = strsep(&input_copy, delim);
+	if (token) {
+		retval = kstrtoint(token, 10, &tmp_data);
+		if (retval) {
+			pr_err("input buffer conversion failed\n");
+			goto exit_free0;
+		}
+		if (tmp_data > sizeof(g_dsi_read_cfg.rbuf)) {
+			pr_err("read size exceeding the limit %d\n",
+					sizeof(g_dsi_read_cfg.rbuf));
+			goto exit_free0;
+		}
+		g_dsi_read_cfg.cmds_rlen = tmp_data;
+	}
+
+	/* Removes leading whitespace from input_copy */
+	if (input_copy)
+		input_copy = skip_spaces(input_copy);
+	else
+		goto exit_free0;
+
+	buffer = kzalloc(strlen(input_copy), GFP_KERNEL);
+	if (!buffer) {
+		retval = -ENOMEM;
+		goto exit_free0;
+	}
+
+	token = strsep(&input_copy, delim);
+	while (token) {
+		retval = kstrtoint(token, 16, &tmp_data);
+		if (retval) {
+			pr_err("input buffer conversion failed\n");
+			goto exit_free1;
+		}
+		pr_debug("[lzl-test]buffer[%d] = 0x%02x\n", buf_size, tmp_data);
+		buffer[buf_size++] = (tmp_data & 0xff);
+		/* Removes leading whitespace from input_copy */
+		if (input_copy) {
+			input_copy = skip_spaces(input_copy);
+			token = strsep(&input_copy, delim);
+		} else {
+			token = NULL;
+		}
+	}
+
+	retval = dsi_panel_get_cmd_pkt_count(buffer, buf_size, &packet_count);
+	if (!packet_count) {
+		pr_err("get pkt count failed!\n");
+		goto exit_free1;
+	}
+
+	retval = dsi_panel_alloc_cmd_packets(&cmd_sets, packet_count);
+	if (retval) {
+		pr_err("failed to allocate cmd packets, ret=%d\n", retval);
+		goto exit_free1;
+	}
+
+	retval = dsi_panel_create_cmd_packets(buffer, dlen, packet_count,
+						  cmd_sets.cmds);
+	if (retval) {
+		pr_err("failed to create cmd packets, ret=%d\n", retval);
+		goto exit_free2;
+	}
+
+	if (g_dsi_read_cfg.enabled) {
+		g_dsi_read_cfg.read_cmd = cmd_sets;
+		retval = dsi_panel_read_cmd_set(panel, &g_dsi_read_cfg);
+		if (retval <= 0) {
+			pr_err("[%s]failed to read cmds, rc=%d\n", panel->name, retval);
+			goto exit_free3;
+		}
+	} else {
+		g_dsi_read_cfg.read_cmd = cmd_sets;
+		retval = dsi_panel_write_cmd_set(panel, &cmd_sets);
+		if (retval) {
+			pr_err("[%s] failed to send cmds, rc=%d\n", panel->name, retval);
+			goto exit_free3;
+		}
+	}
+
+	pr_debug("[%s]: done!\n", panel->name);
+	retval = count;
+
+exit_free3:
+	dsi_panel_destroy_cmd_packets(&cmd_sets);
+exit_free2:
+	dsi_panel_dealloc_cmd_packets(&cmd_sets);
+exit_free1:
+	kfree(buffer);
+exit_free0:
+	kfree(input_dup);
+exit_unlock:
+	mutex_unlock(&panel->panel_lock);
+	return retval;
+}
+
+ssize_t dsi_panel_mipi_reg_read(struct dsi_panel *panel, char *buf)
+{
+	int i = 0;
+	ssize_t count = 0;
+
+	mutex_lock(&panel->panel_lock);
+	if (!panel) {
+		mutex_unlock(&panel->panel_lock);
+		return -EAGAIN;
+	}
+
+	if (g_dsi_read_cfg.enabled) {
+		for (i = 0; i < g_dsi_read_cfg.cmds_rlen; i++) {
+			if (i == g_dsi_read_cfg.cmds_rlen - 1) {
+				count += snprintf(buf + count, PAGE_SIZE - count, "0x%02x\n",
+				     g_dsi_read_cfg.rbuf[i]);
+			} else {
+				count += snprintf(buf + count, PAGE_SIZE - count, "0x%02x ",
+				     g_dsi_read_cfg.rbuf[i]);
+			}
+		}
+	}
+	mutex_unlock(&panel->panel_lock);
+
+	return count;
 }
 
 void dsi_panel_doubleclick_enable(bool on)

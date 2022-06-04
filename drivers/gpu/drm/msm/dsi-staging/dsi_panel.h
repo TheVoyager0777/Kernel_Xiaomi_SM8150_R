@@ -435,5 +435,11 @@ int dsi_panel_read_cmd_set(struct dsi_panel *panel, struct dsi_read_config *read
 int dsi_panel_lockdowninfo_param_read(struct dsi_panel *panel);
 int dsi_panel_esd_irq_ctrl(struct dsi_panel *panel, bool enable);
 
+ssize_t dsi_panel_mipi_reg_write(struct dsi_panel *panel,
+				char *buf, size_t count);
+
+ssize_t dsi_panel_mipi_reg_read(struct dsi_panel *panel,
+				char *buf);
+
 
 #endif /* _DSI_PANEL_H_ */

@@ -409,6 +409,23 @@ static ssize_t dim_layer_enable_show(struct device *device,
 	return snprintf(buf, PAGE_SIZE, fod_dimlayer_enabled ? "enabled\n" : "disabled\n");
 }
 
+static ssize_t mipi_reg_show(struct device *device,
+							  struct device_attribute *attr,
+							  char *buf)
+{
+	struct drm_connector *connector = to_drm_connector(device);
+	return dsi_display_mipi_reg_read(connector, buf);
+}
+
+static ssize_t mipi_reg_store(struct device *device,
+							  struct device_attribute *attr,
+							  const char *buf, size_t count)
+{
+	struct drm_connector *connector = to_drm_connector(device);
+	return dsi_display_mipi_reg_write(connector, (char *)buf, count);;
+}
+
+
 static DEVICE_ATTR_RW(dim_layer_enable);
 static DEVICE_ATTR(dim_alpha, S_IRUGO|S_IWUSR, NULL, xm_fod_dim_layer_alpha_store);
 static DEVICE_ATTR_RW(status);
@@ -417,6 +434,7 @@ static DEVICE_ATTR_RO(dpms);
 static DEVICE_ATTR_RO(modes);
 static DEVICE_ATTR_RO(panel_info);
 static DEVICE_ATTR_RW(disp_param);
+static DEVICE_ATTR_RW(mipi_reg);
 static DEVICE_ATTR_RO(doze_brightness);
 static DEVICE_ATTR_RW(doze_backlight);
 static DEVICE_ATTR_RO(fod_ui_ready);
@@ -432,6 +450,7 @@ static struct attribute *connector_dev_attrs[] = {
 	&dev_attr_doze_backlight.attr,
 	&dev_attr_dim_alpha.attr,
 	&dev_attr_fod_ui_ready.attr,
+	&dev_attr_mipi_reg.attr,
 	&dev_attr_dim_layer_enable.attr,
 	NULL
 };
