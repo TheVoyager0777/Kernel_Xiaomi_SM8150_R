@@ -108,6 +108,7 @@
 #define CP_VOTER		"CP_VOTER"
 #define USER_VOTER		"USER_VOTER"
 #define ILIM_VOTER		"ILIM_VOTER"
+#define FCC_VOTER		"FCC_VOTER"
 #define ICL_VOTER		"ICL_VOTER"
 #define ICL_CHANGE_VOTER	"ICL_CHANGE_VOTER"
 #define TAPER_END_VOTER		"TAPER_END_VOTER"
@@ -299,6 +300,14 @@ out:
 static irqreturn_t default_irq_handler(int irq, void *data)
 {
 	struct smb1390 *chip = data;
+	int i;
+
+	for (i = 0; i < NUM_IRQS; ++i) {
+		if (irq == chip->irqs[i]) {
+			pr_debug("%s IRQ triggered\n", smb_irqs[i].name);
+			chip->irq_status |= 1 << i;
+		}
+	}
 
 	kobject_uevent(&chip->dev->kobj, KOBJ_CHANGE);
 	return IRQ_HANDLED;
@@ -423,6 +432,9 @@ static ssize_t cp_irq_show(struct class *c, struct class_attribute *attr,
 	rc = smb1390_read(chip, CORE_INT_RT_STS_REG, &val);
 	if (rc < 0)
 		return -EINVAL;
+
+	val |= chip->irq_status;
+	chip->irq_status = 0;
 
 	return snprintf(buf, PAGE_SIZE, "%x\n", val);
 }
@@ -893,6 +905,10 @@ static void smb1390_status_change_work(struct work_struct *work)
 								pval.intval);
 			}
 		}
+
+		/* input current is always half the charge current */
+		vote(chip->ilim_votable, FCC_VOTER, true,
+				get_effective_result(chip->fcc_votable) / 2);
 
 		/*
 		 * Remove SMB1390 Taper condition disable vote if float voltage

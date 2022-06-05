@@ -206,6 +206,7 @@ enum print_reason {
 #define DCIN_ICL_STEP_UA		100000
 #define SLOWLY_CHARGING_CURRENT		1000000
 #define ADC_CHG_TERM_MASK		32767
+#define HVDCP3P5_40W_CURRENT_UA		4500000
 /*DCIN ICL*/
 #define PSNS_CURRENT_SAMPLE_RATE 1053
 #define PSNS_CURRENT_SAMPLE_RESIS 392
@@ -247,7 +248,7 @@ enum print_reason {
 /* used for bq charge pump solution */
 #define MAIN_CHARGER_ICL	2000000
 #define QC3_CHARGER_ICL		500000
-#define QC3P5_CHARGER_ICL	200000
+#define QC3P5_CHARGER_ICL	2000000
 
 #define MAIN_CHARGER_STOP_ICL	50000
 #define ESR_WORK_TIME_2S	2000
@@ -702,6 +703,7 @@ struct smb_charger {
 	struct delayed_work	six_pin_batt_step_chg_work;
 	struct delayed_work	reduce_fcc_work;
 	struct delayed_work	thermal_setting_work;
+	struct delayed_work	check_vbat_work;
 	struct alarm		lpd_recheck_timer;
 	struct alarm		moisture_protection_alarm;
 	struct alarm		chg_termination_alarm;
@@ -845,10 +847,13 @@ struct smb_charger {
 	bool			apsd_ext_timeout;
 	bool			qc3p5_detected;
 	int			vbus_disable;
+	bool			en_bq_flag;
 	int64_t			rpp;
 	int64_t			cep;
 	int64_t			tx_bt_mac;
+	int64_t			pen_bt_mac;
 	int			reverse_chg_state;
+	int			reverse_gpio_state;
 
 	/* workaround flag */
 	u32			wa_flags;
@@ -908,6 +913,7 @@ struct smb_charger {
 	bool			cc_un_compliant_detected;
 	bool			snk_debug_acc_detected;
 	bool			support_wireless;
+	bool			wireless_bq;
 	bool			support_conn_therm;
 	bool			ext_fg;
 	int			conn_detect_count;
