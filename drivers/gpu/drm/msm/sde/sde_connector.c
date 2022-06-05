@@ -2627,6 +2627,7 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 	struct sde_kms *sde_kms;
 	struct sde_connector *c_conn = NULL;
 	struct msm_display_info display_info;
+	struct dsi_display *dsi_display;
 	int rc;
 
 	if (!dev || !dev->dev_private || !encoder) {
@@ -2751,38 +2752,6 @@ struct drm_connector *sde_connector_init(struct drm_device *dev,
 			"mode_properties",
 			DRM_MODE_PROP_IMMUTABLE,
 			CONNECTOR_PROP_MODE_INFO);
-
-	if (connector_type == DRM_MODE_CONNECTOR_DSI) {
-		dsi_display = (struct dsi_display *)(display);
-		if (dsi_display && dsi_display->panel &&
-			dsi_display->panel->hdr_props.hdr_enabled == true) {
-			msm_property_install_blob(&c_conn->property_info,
-				"hdr_properties",
-				DRM_MODE_PROP_IMMUTABLE,
-				CONNECTOR_PROP_HDR_INFO);
-
-			msm_property_set_blob(&c_conn->property_info,
-				&c_conn->blob_hdr,
-				&dsi_display->panel->hdr_props,
-				sizeof(dsi_display->panel->hdr_props),
-				CONNECTOR_PROP_HDR_INFO);
-		}
-
-		/* register esd irq and enable it after panel enabled */
-		if (dsi_display && dsi_display->panel &&
-			dsi_display->panel->esd_config.esd_err_irq_gpio > 0) {
-			rc = request_threaded_irq(dsi_display->panel->esd_config.esd_err_irq,
-							NULL, esd_err_irq_handle,
-							dsi_display->panel->esd_config.esd_err_irq_flags,
-							"esd_err_irq", c_conn);
-			if (rc < 0) {
-				pr_err("%s: request irq %d failed\n", __func__, dsi_display->panel->esd_config.esd_err_irq);
-					dsi_display->panel->esd_config.esd_err_irq = 0;
-			} else {
-				pr_info("%s: Request esd irq succeed!\n", __func__);
-			}
-		}
-	}
 
 	rc = sde_connector_get_info(&c_conn->base, &display_info);
 	if (!rc && (connector_type == DRM_MODE_CONNECTOR_DSI) &&
