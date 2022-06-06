@@ -87,6 +87,9 @@ struct dsi_dfps_capabilities {
 	u32 *dfps_list;
 	u32 dfps_list_len;
 	bool dfps_support;
+	/* smart fps control */
+	bool smart_fps_support;
+	u32 smart_fps_value;
 };
 
 struct dsi_dyn_clk_caps {
