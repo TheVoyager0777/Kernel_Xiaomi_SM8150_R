@@ -679,7 +679,6 @@ static bool _sde_encoder_phys_cmd_is_scheduler_idle(
 	 * due to irq latency with POSTED start
 	 */
 	if (wr_ptr_wait_success &&
-	  (phys_enc->frame_trigger_mode == FRAME_DONE_WAIT_POSTED_START) &&
 	  ctl->ops.get_scheduler_status &&
 	  (ctl->ops.get_scheduler_status(ctl) & BIT(0)) &&
 	  atomic_add_unless(&phys_enc->pending_kickoff_cnt, -1, 0) &&
@@ -1347,25 +1346,21 @@ static int sde_encoder_phys_cmd_prepare_for_kickoff(
 	}
 	SDE_DEBUG_CMDENC(cmd_enc, "pp %d\n", phys_enc->hw_pp->idx - PINGPONG_0);
 
-	phys_enc->frame_trigger_mode = params->frame_trigger_mode;
 	SDE_EVT32(DRMID(phys_enc->parent), phys_enc->hw_pp->idx - PINGPONG_0,
 			atomic_read(&phys_enc->pending_kickoff_cnt),
-			atomic_read(&cmd_enc->autorefresh.kickoff_cnt),
-			phys_enc->frame_trigger_mode);
+			atomic_read(&cmd_enc->autorefresh.kickoff_cnt));
 
-	if (phys_enc->frame_trigger_mode == FRAME_DONE_WAIT_DEFAULT) {
-		/*
-		 * Mark kickoff request as outstanding. If there are more than
-		 * one outstanding frame, then we have to wait for the previous
-		 * frame to complete
-		 */
-		ret = _sde_encoder_phys_cmd_wait_for_idle(phys_enc);
-		if (ret) {
-			atomic_set(&phys_enc->pending_kickoff_cnt, 0);
-			SDE_EVT32(DRMID(phys_enc->parent),
+	/*
+	 * Mark kickoff request as outstanding. If there are more than one,
+	 * outstanding, then we have to wait for the previous one to complete
+	 */
+	ret = _sde_encoder_phys_cmd_wait_for_idle(phys_enc);
+	if (ret) {
+		/* force pending_kickoff_cnt 0 to discard failed kickoff */
+		atomic_set(&phys_enc->pending_kickoff_cnt, 0);
+		SDE_EVT32(DRMID(phys_enc->parent),
 				phys_enc->hw_pp->idx - PINGPONG_0);
-			SDE_ERROR("failed wait_for_idle: %d\n", ret);
-		}
+		SDE_ERROR("failed wait_for_idle: %d\n", ret);
 	}
 
 	if (sde_connector_is_qsync_updated(phys_enc->connector)) {
@@ -1483,10 +1478,8 @@ static int sde_encoder_phys_cmd_wait_for_tx_complete(
 static int sde_encoder_phys_cmd_wait_for_commit_done(
 		struct sde_encoder_phys *phys_enc)
 {
-	int rc = 0, i, pending_cnt;
+	int rc = 0;
 	struct sde_encoder_phys_cmd *cmd_enc;
-	u32 scheduler_status = INVALID_CTL_STATUS;
-	struct sde_hw_ctl *ctl;
 
 	if (!phys_enc)
 		return -EINVAL;
@@ -1494,47 +1487,16 @@ static int sde_encoder_phys_cmd_wait_for_commit_done(
 	cmd_enc = to_sde_encoder_phys_cmd(phys_enc);
 
 	/* only required for master controller */
-	if (sde_encoder_phys_cmd_is_master(phys_enc)) {
+	if (sde_encoder_phys_cmd_is_master(phys_enc))
 		rc = _sde_encoder_phys_cmd_wait_for_wr_ptr(phys_enc);
-		if (rc == -ETIMEDOUT)
-			goto wait_for_idle;
 
-		if (cmd_enc->autorefresh.cfg.enable)
-			rc = _sde_encoder_phys_cmd_wait_for_autorefresh_done(
-						phys_enc);
+	if (!rc && sde_encoder_phys_cmd_is_master(phys_enc) &&
+			cmd_enc->autorefresh.cfg.enable)
+		rc = _sde_encoder_phys_cmd_wait_for_autorefresh_done(phys_enc);
 
-		ctl = phys_enc->hw_ctl;
-		if (ctl && ctl->ops.get_scheduler_status)
-			scheduler_status = ctl->ops.get_scheduler_status(ctl);
-	}
-
-	/* wait for posted start or serialize trigger */
-	pending_cnt = atomic_read(&phys_enc->pending_kickoff_cnt);
-	if ((pending_cnt > 1) ||
-		(pending_cnt && (scheduler_status & BIT(0))) ||
-		(!rc && phys_enc->frame_trigger_mode ==
-			FRAME_DONE_WAIT_SERIALIZE))
-		goto wait_for_idle;
-
-	return rc;
-
-wait_for_idle:
-	pending_cnt = atomic_read(&phys_enc->pending_kickoff_cnt);
-	for (i = 0; i < pending_cnt; i++)
-		rc |= sde_encoder_wait_for_event(phys_enc->parent,
-				MSM_ENC_TX_COMPLETE);
-	if (rc) {
-		SDE_EVT32(DRMID(phys_enc->parent),
-			phys_enc->hw_pp->idx - PINGPONG_0,
-			phys_enc->frame_trigger_mode,
-			atomic_read(&phys_enc->pending_kickoff_cnt),
-			phys_enc->enable_state,
-			cmd_enc->wr_ptr_wait_success, scheduler_status, rc);
-		SDE_ERROR("pp:%d failed wait_for_idle: %d\n",
-			phys_enc->hw_pp->idx - PINGPONG_0, rc);
-		if (phys_enc->enable_state == SDE_ENC_ERR_NEEDS_HW_RESET)
-			sde_encoder_helper_needs_hw_reset(phys_enc->parent);
-	}
+	/* required for both controllers */
+	if (!rc && cmd_enc->serialize_wait4pp)
+		sde_encoder_phys_cmd_prepare_for_kickoff(phys_enc, NULL);
 
 	return rc;
 }

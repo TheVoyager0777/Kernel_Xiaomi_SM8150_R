@@ -308,7 +308,6 @@ struct sde_crtc {
 	/* blob for histogram data */
 	struct drm_property_blob *hist_blob;
 	bool is_primary_sde_crtc;
-	enum frame_trigger_mode_type frame_trigger_mode;
 };
 
 #define to_sde_crtc(x) container_of(x, struct sde_crtc, base)
@@ -558,20 +557,6 @@ static inline int sde_crtc_frame_pending(struct drm_crtc *crtc)
  */
 int sde_crtc_reset_hw(struct drm_crtc *crtc, struct drm_crtc_state *old_state,
 	bool recovery_events);
-
-/**
- * sde_crtc_request_frame_reset - requests for next frame reset
- * @crtc: Pointer to drm crtc object
- */
-static inline int sde_crtc_request_frame_reset(struct drm_crtc *crtc)
-{
-	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
-
-	if (sde_crtc->frame_trigger_mode == FRAME_DONE_WAIT_POSTED_START)
-		sde_crtc_reset_hw(crtc, crtc->state, false);
-
-	return 0;
-}
 
 /**
  * sde_crtc_vblank - enable or disable vblanks for this crtc

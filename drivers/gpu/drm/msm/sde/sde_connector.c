@@ -75,12 +75,6 @@ static const struct drm_prop_enum_list e_qsync_mode[] = {
 	{SDE_RM_QSYNC_ONE_SHOT_MODE,	"one_shot"},
 };
 
-static const struct drm_prop_enum_list e_frame_trigger_mode[] = {
-	{FRAME_DONE_WAIT_DEFAULT, "default"},
-	{FRAME_DONE_WAIT_SERIALIZE, "serialize_frame_trigger"},
-	{FRAME_DONE_WAIT_POSTED_START, "posted_start"},
-};
-
 static int sde_backlight_device_update_status(struct backlight_device *bd)
 {
 	int brightness;
@@ -2577,13 +2571,6 @@ static int _sde_connector_install_properties(struct drm_device *dev,
 					"qsync_mode", 0, 0, e_qsync_mode,
 					ARRAY_SIZE(e_qsync_mode),
 					CONNECTOR_PROP_QSYNC_MODE);
-
-		if (display_info->capabilities & MSM_DISPLAY_CAP_CMD_MODE)
-			msm_property_install_enum(&c_conn->property_info,
-				"frame_trigger_mode", 0, 0,
-				e_frame_trigger_mode,
-				ARRAY_SIZE(e_frame_trigger_mode),
-				CONNECTOR_PROP_CMD_FRAME_TRIGGER_MODE);
 	}
 
 	msm_property_install_range(&c_conn->property_info, "bl_scale",
