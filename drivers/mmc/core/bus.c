@@ -378,6 +378,12 @@ int mmc_add_card(struct mmc_card *card)
 			uhs_bus_speed_mode, type, card->rca);
 	}
 
+#ifdef CONFIG_MACH_LGE
+	/* Adding Print for more information.
+	 */
+	printk(KERN_INFO "[LGE][MMC][%-18s( )] mmc_hostname:%s, type:%s\n", __func__, mmc_hostname(card->host), type);
+#endif
+
 #ifdef CONFIG_DEBUG_FS
 	mmc_add_card_debugfs(card);
 #endif
@@ -393,8 +399,19 @@ int mmc_add_card(struct mmc_card *card)
 	}
 
 	ret = device_add(&card->dev);
+#ifdef CONFIG_MACH_LGE
+	/* Adding Print for more information.
+	 */
+	if (ret) {
+		printk(KERN_INFO "[LGE][MMC][%-18s( )] device_add & uevent posting fail!, ret:%d \n", __func__, ret);
+		return ret;
+	} else {
+		printk(KERN_INFO "[LGE][MMC][%-18s( )] device_add & uevent posting complete!\n", __func__);
+	}
+#else
 	if (ret)
 		return ret;
+#endif
 
 	mmc_card_set_present(card);
 	device_enable_async_suspend(&card->dev);

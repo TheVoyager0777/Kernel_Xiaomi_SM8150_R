@@ -1109,13 +1109,13 @@ void rndis_free_response(struct rndis_params *params, u8 *buf)
 
 	spin_lock(&params->resp_lock);
 
+	spin_lock(&params->resp_lock);
 	list_for_each_entry_safe(r, n, &params->resp_queue, list) {
 		if (r->buf == buf) {
 			list_del(&r->list);
 			kfree(r);
 		}
 	}
-
 	spin_unlock(&params->resp_lock);
 }
 EXPORT_SYMBOL_GPL(rndis_free_response);
@@ -1135,7 +1135,6 @@ u8 *rndis_get_next_response(struct rndis_params *params, u32 *length)
 			*length = r->length;
 
 			spin_unlock(&params->resp_lock);
-
 			return r->buf;
 		}
 	}

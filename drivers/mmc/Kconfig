@@ -12,6 +12,13 @@ menuconfig MMC
 	  If you want MMC/SD/SDIO support, you should say Y here and
 	  also to your specific host controller driver.
 
+config MMC_DEBUG
+	bool "MMC debugging"
+	depends on MMC != n
+	help
+	  This is an option for use by developers; most people should
+	  say N here.  This enables MMC core and driver debugging.
+
 config MMC_PERF_PROFILING
 	bool "MMC performance profiling"
 	depends on MMC != n
@@ -19,6 +26,26 @@ config MMC_PERF_PROFILING
 	help
 	  If you say Y here, support will be added for collecting
 	  performance numbers at the MMC Queue and Host layers.
+
+config LGE_MMC_CLK_SCALE_DISABLE
+	bool "disable clock scaling for mmc"
+	default y
+	help
+	  If you say Y here, clock scaling for mmc device will be disabled.
+	  Set Y in kernel/arch/arm/configs/XXXX_defconfig file.
+
+config LGE_TRAY_EVENT
+    bool "Show SD Card Detect pin status"
+    depends on MACH_LGE
+    default y
+    help
+        Support the uevent for SD Card TRAY status.
+
+config LGE_ENABLE_MMC_CAP_SD_WAKE
+    bool "enable interrupt during sleep status"
+    default y
+    help
+        If you say Y here, SD Card interrupt pin is interruptable in sleep status.
 
 if MMC
 

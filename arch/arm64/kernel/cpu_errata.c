@@ -509,13 +509,6 @@ static const struct midr_range spectre_v2_safe_list[] = {
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_A35),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_A53),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_A55),
-	MIDR_ALL_VERSIONS(MIDR_KRYO3S),
-	MIDR_ALL_VERSIONS(MIDR_KRYO4S),
-	MIDR_ALL_VERSIONS(MIDR_KRYO2XX_SILVER),
-	MIDR_RANGE(MIDR_KRYO4G, 0, 0, 12, 13),
-	MIDR_RANGE(MIDR_KRYO4G, 13, 15,
-		   (MIDR_VARIANT_MASK >> MIDR_VARIANT_SHIFT),
-		   MIDR_REVISION_MASK),
 	{ /* sentinel */ }
 };
 
@@ -614,12 +607,6 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.desc = "ARM erratum 845719",
 		.capability = ARM64_WORKAROUND_845719,
 		ERRATA_MIDR_REV_RANGE(MIDR_CORTEX_A53, 0, 0, 4),
-	},
-	{
-	/* Kryo2xx Silver rAp4 */
-		.desc = "Kryo2xx Silver erratum 845719",
-		.capability = ARM64_WORKAROUND_845719,
-		ERRATA_MIDR_REV_RANGE(MIDR_KRYO2XX_SILVER, 0xA, 4, 4),
 	},
 #endif
 #ifdef CONFIG_CAVIUM_ERRATUM_23154
@@ -726,12 +713,6 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 		.capability = ARM64_WORKAROUND_858921,
 		ERRATA_MIDR_ALL_VERSIONS(MIDR_CORTEX_A73),
 	},
-	{
-	/* KRYO2XX all versions */
-		.desc = "ARM erratum 858921",
-		.capability = ARM64_WORKAROUND_858921,
-		ERRATA_MIDR_ALL_VERSIONS(MIDR_KRYO2XX_GOLD),
-	},
 #endif
 	{
 		.capability = ARM64_HARDEN_BRANCH_PREDICTOR,
@@ -754,14 +735,6 @@ const struct arm64_cpu_capabilities arm64_errata[] = {
 				  0, 0,
 				  2, 0),
 
-	},
-	{
-		.desc = "ARM erratum 1188873",
-		.capability = ARM64_WORKAROUND_1188873,
-		/* Kryo-4G r15p14 */
-		ERRATA_MIDR_RANGE(MIDR_KRYO4G,
-				  15, 14,
-				  15, 15),
 	},
 #endif
 	{
@@ -881,13 +854,23 @@ u8 spectre_bhb_loop_affected(int scope)
 
 	if (scope == SCOPE_LOCAL_CPU) {
 		static const struct midr_range spectre_bhb_k32_list[] = {
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A78),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A78C),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_X1),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A710),
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_X2),
+			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N2),
+			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V1),
 			{},
 		};
 		static const struct midr_range spectre_bhb_k24_list[] = {
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A77),
 			MIDR_ALL_VERSIONS(MIDR_CORTEX_A76),
+			MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N1),
 			{},
 		};
 		static const struct midr_range spectre_bhb_k8_list[] = {
+			MIDR_ALL_VERSIONS(MIDR_CORTEX_A72),
 			MIDR_ALL_VERSIONS(MIDR_CORTEX_A57),
 			{},
 		};
