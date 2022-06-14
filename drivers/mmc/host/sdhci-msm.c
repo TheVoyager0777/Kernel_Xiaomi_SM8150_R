@@ -2571,23 +2571,6 @@ out:
 	return ret;
 }
 
-#ifdef CONFIG_MACH_LGE
-/*
- * Reset vreg by ensuring it is off during probe. A call
- * to enable vreg is needed to balance disable vreg
- */
-static int sdhci_msm_vreg_reset(struct sdhci_msm_pltfm_data *pdata)
-{
-	int ret;
-
-	ret = sdhci_msm_setup_vreg(pdata, 1, true);
-	if (ret)
-		return ret;
-	ret = sdhci_msm_setup_vreg(pdata, 0, true);
-	return ret;
-}
-#endif
-
 /* This init function should be called only once for each SDHC slot */
 static int sdhci_msm_vreg_init(struct device *dev,
 				struct sdhci_msm_pltfm_data *pdata,
@@ -2622,15 +2605,6 @@ static int sdhci_msm_vreg_init(struct device *dev,
 		if (ret)
 			goto vdd_reg_deinit;
 	}
-
-#ifdef CONFIG_MACH_LGE
-	/*
-	 * vreg reset is needed to recognize card insertion at early stage (0~4sec)
-	 * caused by pin shortage with sim tray.
-	*/
-	if (!pdata->nonremovable)
-		ret = sdhci_msm_vreg_reset(pdata);
-#endif
 
 	if (ret)
 		dev_err(dev, "vreg reset failed (%d)\n", ret);
@@ -4188,8 +4162,8 @@ void sdhci_msm_pm_qos_irq_init(struct sdhci_host *host)
 		(msm_host->pm_qos_irq.req.type != PM_QOS_REQ_ALL_CORES))
 		set_affine_irq(msm_host, host);
 	else
-		cpumask_copy(&msm_host->pm_qos_irq.req.cpus_affine,
-			cpumask_of(msm_host->pdata->pm_qos_data.irq_cpu));
+		atomic_set(&msm_host->pm_qos_irq.req.cpus_affine,
+			*cpumask_bits(cpumask_of(msm_host->pdata->pm_qos_data.irq_cpu)));
 
 	sdhci_msm_pm_qos_wq_init(msm_host);
 
@@ -4243,8 +4217,8 @@ static ssize_t sdhci_msm_pm_qos_group_show(struct device *dev,
 	for (i = 0; i < nr_groups; i++) {
 		group = &msm_host->pm_qos[i];
 		offset += snprintf(&buf[offset], PAGE_SIZE,
-			"Group #%d (mask=0x%lx) PM QoS: enabled=%d, counter=%d, latency=%d\n",
-			i, group->req.cpus_affine.bits[0],
+			"Group #%d PM QoS: enabled=%d, counter=%d, latency=%d\n",
+			i,
 			msm_host->pm_qos_group_enable,
 			atomic_read(&group->counter),
 			group->latency);
@@ -4403,15 +4377,14 @@ void sdhci_msm_pm_qos_cpu_init(struct sdhci_host *host,
 			sdhci_msm_pm_qos_cpu_unvote_work);
 		atomic_set(&group->counter, 0);
 		group->req.type = PM_QOS_REQ_AFFINE_CORES;
-		cpumask_copy(&group->req.cpus_affine,
-			&msm_host->pdata->pm_qos_data.cpu_group_map.mask[i]);
+		atomic_set(&group->req.cpus_affine,
+			*cpumask_bits(&msm_host->pdata->pm_qos_data.cpu_group_map.mask[i]));
 		/* We set default latency here for all pm_qos cpu groups. */
 		group->latency = PM_QOS_DEFAULT_VALUE;
 		pm_qos_add_request(&group->req, PM_QOS_CPU_DMA_LATENCY,
 			group->latency);
-		pr_info("%s (): voted for group #%d (mask=0x%lx) latency=%d\n",
+		pr_info("%s (): voted for group #%d latency=%d\n",
 			__func__, i,
-			group->req.cpus_affine.bits[0],
 			group->latency);
 	}
 	msm_host->pm_qos_prev_cpu = -1;
@@ -5067,10 +5040,6 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 
 	host->quirks2 |= SDHCI_QUIRK2_IGN_DATA_END_BIT_ERROR;
 
-#ifdef CONFIG_MACH_LGE
-	/* disable led control */
-	host->quirks2 |= SDHCI_QUIRK2_BROKEN_LED_CONTROL;
-#endif
 	/* Setup PWRCTL irq */
 	msm_host->pwr_irq = platform_get_irq_byname(pdev, "pwr_irq");
 	if (msm_host->pwr_irq < 0) {
@@ -5078,7 +5047,6 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 				msm_host->pwr_irq);
 		goto vreg_deinit;
 	}
-
 	ret = devm_request_threaded_irq(&pdev->dev, msm_host->pwr_irq, NULL,
 					sdhci_msm_pwr_irq, IRQF_ONESHOT,
 					dev_name(&pdev->dev), host);
@@ -5102,17 +5070,10 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	msm_host->mmc->caps |= msm_host->pdata->caps;
 	msm_host->mmc->caps |= MMC_CAP_AGGRESSIVE_PM;
 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY;
-#ifdef CONFIG_LGE_ENABLE_MMC_CAP_SD_WAKE
-	msm_host->mmc->caps |= MMC_CAP_CD_WAKE;
-#endif
 	msm_host->mmc->caps2 |= msm_host->pdata->caps2;
 	msm_host->mmc->caps2 |= MMC_CAP2_BOOTPART_NOACC;
 	msm_host->mmc->caps2 |= MMC_CAP2_HS400_POST_TUNING;
-#ifdef CONFIG_LGE_MMC_CLK_SCALE_DISABLE
-	msm_host->mmc->caps2 &= ~MMC_CAP2_CLK_SCALE;
-#else
 	msm_host->mmc->caps2 |= MMC_CAP2_CLK_SCALE;
-#endif
 	msm_host->mmc->caps2 |= MMC_CAP2_SANITIZE;
 	msm_host->mmc->caps2 |= MMC_CAP2_MAX_DISCARD_SIZE;
 	msm_host->mmc->caps2 |= MMC_CAP2_SLEEP_AWAKE;
