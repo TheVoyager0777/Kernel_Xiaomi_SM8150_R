@@ -52,4 +52,5 @@ unsigned long topology_get_max_freq_scale(struct sched_domain *sd, int cpu)
 	return per_cpu(max_freq_scale, cpu);
 }
 
+extern bool topology_update_done;
 #endif /* _LINUX_ARCH_TOPOLOGY_H_ */

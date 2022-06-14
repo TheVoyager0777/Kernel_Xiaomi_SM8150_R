@@ -17,7 +17,7 @@
 #include <linux/slab.h>
 #include <trace/events/power.h>
 #include <linux/sched/sysctl.h>
-#include "sched.h"
+#include "walt/walt_refer.h"
 
 #define SUGOV_KTHREAD_PRIORITY	50
 

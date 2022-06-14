@@ -1349,56 +1349,6 @@ TRACE_EVENT_CONDITION(sched_overutilized,
 );
 
 /*
- * Tracepoint for find_best_target
- */
-TRACE_EVENT(sched_find_best_target,
-
-	TP_PROTO(struct task_struct *tsk, bool prefer_idle,
-		unsigned long min_util, int start_cpu,
-		int best_idle, int best_active, int most_spare_cap, int target,
-		int backup_cpu),
-
-	TP_ARGS(tsk, prefer_idle, min_util, start_cpu,
-		best_idle, best_active, most_spare_cap, target,
-		backup_cpu),
-
-	TP_STRUCT__entry(
-		__array( char,	comm,	TASK_COMM_LEN	)
-		__field( pid_t,	pid			)
-		__field( unsigned long,	min_util	)
-		__field( bool,	prefer_idle		)
-		__field( int,	start_cpu		)
-		__field( int,	best_idle		)
-		__field( int,	best_active		)
-		__field( int,	most_spare_cap		)
-		__field( int,	target			)
-		__field( int,	backup_cpu)
-	),
-
-	TP_fast_assign(
-		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
-		__entry->pid		= tsk->pid;
-		__entry->min_util	= min_util;
-		__entry->prefer_idle	= prefer_idle;
-		__entry->start_cpu 	= start_cpu;
-		__entry->best_idle	= best_idle;
-		__entry->best_active	= best_active;
-		__entry->most_spare_cap	= most_spare_cap;
-		__entry->target		= target;
-		__entry->backup_cpu	= backup_cpu;
-	),
-
-	TP_printk("pid=%d comm=%s prefer_idle=%d start_cpu=%d "
-		  "best_idle=%d best_active=%d most_spare_cap=%d target=%d backup=%d",
-		__entry->pid, __entry->comm,
-		__entry->prefer_idle, __entry->start_cpu,
-		__entry->best_idle, __entry->best_active,
-		__entry->most_spare_cap,
-		__entry->target,
-		__entry->backup_cpu)
-);
-
-/*
  * Tracepoint for tasks' estimated utilization.
  */
 TRACE_EVENT(sched_util_est_task,
@@ -1539,69 +1489,6 @@ TRACE_EVENT(sched_energy_diff,
 		__entry->backup_cpu, __entry->backup_energy)
 );
 
-TRACE_EVENT(sched_task_util,
-
-	TP_PROTO(struct task_struct *p, int next_cpu, int backup_cpu,
-		int target_cpu, bool sync, int need_idle, int fastpath,
-		bool placement_boost, u64 start_t,
-		bool stune_boosted, bool is_rtg, bool rtg_skip_min,
-		int start_cpu),
-
-	TP_ARGS(p, next_cpu, backup_cpu, target_cpu, sync, need_idle, fastpath,
-		placement_boost, start_t, stune_boosted, is_rtg, rtg_skip_min,
-		start_cpu),
-
-	TP_STRUCT__entry(
-		__field(int, pid			)
-		__array(char, comm, TASK_COMM_LEN	)
-		__field(unsigned long, util		)
-		__field(int, prev_cpu			)
-		__field(int, next_cpu			)
-		__field(int, backup_cpu			)
-		__field(int, target_cpu			)
-		__field(bool, sync			)
-		__field(int, need_idle			)
-		__field(int, fastpath			)
-		__field(int, placement_boost		)
-		__field(int, rtg_cpu			)
-		__field(u64, latency			)
-		__field(bool, stune_boosted		)
-		__field(bool, is_rtg			)
-		__field(bool, rtg_skip_min		)
-		__field(int, start_cpu			)
-		__field(u32, unfilter			)
-	),
-
-	TP_fast_assign(
-		__entry->pid			= p->pid;
-		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
-		__entry->util			= task_util(p);
-		__entry->prev_cpu		= task_cpu(p);
-		__entry->next_cpu		= next_cpu;
-		__entry->backup_cpu		= backup_cpu;
-		__entry->target_cpu		= target_cpu;
-		__entry->sync			= sync;
-		__entry->need_idle		= need_idle;
-		__entry->fastpath		= fastpath;
-		__entry->placement_boost	= placement_boost;
-		__entry->latency		= (sched_clock() - start_t);
-		__entry->stune_boosted		= stune_boosted;
-		__entry->is_rtg			= is_rtg;
-		__entry->rtg_skip_min		= rtg_skip_min;
-		__entry->start_cpu		= start_cpu;
-		__entry->unfilter		= p->unfilter;
-	),
-
-	TP_printk("pid=%d comm=%s util=%lu prev_cpu=%d next_cpu=%d backup_cpu=%d target_cpu=%d sync=%d need_idle=%d fastpath=%d placement_boost=%d latency=%llu stune_boosted=%d is_rtg=%d rtg_skip_min=%d start_cpu=%d unfilter=%u",
-		__entry->pid, __entry->comm, __entry->util, __entry->prev_cpu,
-		__entry->next_cpu, __entry->backup_cpu, __entry->target_cpu,
-		__entry->sync, __entry->need_idle,
-		__entry->fastpath, __entry->placement_boost,
-		__entry->latency, __entry->stune_boosted,
-		__entry->is_rtg, __entry->rtg_skip_min, __entry->start_cpu,
-		__entry->unfilter)
-)
-
 /*
  * Tracepoint for sched_get_nr_running_avg
  */
@@ -1680,14 +1567,11 @@ TRACE_EVENT(sched_isolate,
 #define trace_sched_tune_boostgroup_update(...) {}
 #define trace_sched_boost_task(...) {}
 #define trace_sched_overutilized(...) {}
-#define trace_sched_find_best_target(...) {}
 #define trace_sched_util_est_task(...) {}
 #define trace_sched_util_est_cpu(...) {}
 #define trace_sched_capacity_update(...) {}
 #define trace_sched_cpu_util(...) {}
 #define trace_sched_energy_diff(...) {}
-#define trace_sched_task_util(...) {}
-#define trace_sched_task_util_enabled(...) false
 #define trace_sched_get_nr_running_avg(...) {}
 #define trace_sched_isolate(...) {}
 #define trace_sched_isolate_enabled(...) false

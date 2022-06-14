@@ -285,9 +285,8 @@ static void register_hooks(void)
 	register_trace_energey_compute_assist(energey_compute_assist, NULL);
 }
 
-int walt_init(void)
+int walt_cfs_init(void)
 {
         register_hooks();
         return 0;
 }
-module_init(walt_init);

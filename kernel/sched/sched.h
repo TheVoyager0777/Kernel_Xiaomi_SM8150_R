@@ -81,6 +81,7 @@ struct walt_sched_stats {
 	int nr_big_tasks;
 	u64 cumulative_runnable_avg_scaled;
 	u64 pred_demands_sum_scaled;
+	unsigned int nr_rtg_high_prio_tasks;
 };
 
 struct group_cpu_time {
@@ -2058,7 +2059,6 @@ unsigned long arch_scale_cpu_capacity(struct sched_domain *sd, int cpu)
 #endif
 
 extern unsigned int sysctl_sched_use_walt_cpu_util;
-extern unsigned int walt_disabled;
 
 #ifdef CONFIG_SMP
 static inline unsigned long capacity_of(int cpu)
@@ -2854,6 +2854,11 @@ extern unsigned int sched_boost_type;
 static inline int sched_boost(void)
 {
 	return sched_boost_type;
+}
+
+static inline bool is_full_throttle_boost(void)
+{
+	return sched_boost() == FULL_THROTTLE_BOOST;
 }
 
 extern int preferred_cluster(struct sched_cluster *cluster,

@@ -3,6 +3,6 @@
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
  */
 
+#define CREATE_TRACE_POINTS
 #include "trace.h"
-
 
