@@ -24,7 +24,7 @@
 #include <linux/sched/core_ctl.h>
 
 #include <trace/events/sched.h>
-#include "sched.h"
+#include "walt/walt_refer.h"
 #include "walt.h"
 
 struct cluster_data {

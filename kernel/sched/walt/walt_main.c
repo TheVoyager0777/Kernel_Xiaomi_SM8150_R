@@ -39,6 +39,24 @@ static struct syscore_ops walt_syscore_ops = {
 	.suspend	= walt_suspend
 };
 
+static inline void __sched_fork_init(struct task_struct *p)
+{
+	p->wake_up_idle	= false;
+	p->low_latency	= false;
+	p->iowaited		= false;
+}
+
+static void walt_init_new_task_load(struct task_struct *p)
+{
+	__sched_fork_init(p);
+}
+
+static void walt_init_existing_task_load(struct task_struct *p)
+{
+	walt_init_new_task_load(p);
+	cpumask_copy(&p->cpus_requested, &p->cpus_mask);
+}
+
 static void init_cpu_array(void)
 {
 	int i;
@@ -240,6 +258,11 @@ static void register_walt_hooks(void)
 
 static int walt_init_stop_handler(void *data)
 {
+	struct task_struct *g, *p;
+
+	do_each_thread(g, p) {
+		walt_init_existing_task_load(p);
+	} while_each_thread(g, p);
 
 	walt_update_cluster_topology();
 	walt_disabled = false;

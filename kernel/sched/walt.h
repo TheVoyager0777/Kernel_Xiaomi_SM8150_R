@@ -192,31 +192,6 @@ void account_irqtime(int cpu, struct task_struct *curr, u64 delta,
                                   u64 wallclock);
 extern bool do_pl_notif(struct rq *rq);
 
-#define SCHED_HIGH_IRQ_TIMEOUT 3
-static inline u64 sched_irqload(int cpu)
-{
-	struct rq *rq = cpu_rq(cpu);
-	s64 delta;
-
-	delta = get_jiffies_64() - rq->irqload_ts;
-	/*
-	 * Current context can be preempted by irq and rq->irqload_ts can be
-	 * updated by irq context so that delta can be negative.
-	 * But this is okay and we can safely return as this means there
-	 * was recent irq occurrence.
-	 */
-
-	if (delta < SCHED_HIGH_IRQ_TIMEOUT)
-		return rq->avg_irqload;
-	else
-		return 0;
-}
-
-static inline int sched_cpu_high_irqload(int cpu)
-{
-	return sched_irqload(cpu) >= sysctl_sched_cpu_high_irqload;
-}
-
 static inline int exiting_task(struct task_struct *p)
 {
 	return (p->ravg.sum_history[0] == EXITING_TASK_MARKER);
@@ -515,7 +490,6 @@ static inline void init_new_task_load(struct task_struct *p)
 
 static inline void mark_task_starting(struct task_struct *p) { }
 static inline void set_window_start(struct rq *rq) { }
-static inline int sched_cpu_high_irqload(int cpu) { return 0; }
 
 static inline void sched_account_irqstart(int cpu, struct task_struct *curr,
 					  u64 wallclock)

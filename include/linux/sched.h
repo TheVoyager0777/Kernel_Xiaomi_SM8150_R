@@ -866,8 +866,12 @@ struct task_struct {
 	struct related_thread_group *grp;
 	struct list_head grp_list;
 	u64 cpu_cycles;
+	bool				wake_up_idle;
 	bool misfit;
 	u32 unfilter;
+	cpumask_t			cpus_requested;
+	bool				iowaited;
+	bool low_latency;
 	bool rtg_high_prio;
 #endif
 
@@ -901,7 +905,8 @@ struct task_struct {
 	unsigned int			policy;
 	int				nr_cpus_allowed;
 	cpumask_t			cpus_allowed;
-	cpumask_t			cpus_requested;
+	const cpumask_t			*cpus_ptr;
+	cpumask_t			cpus_mask;
 
 #ifdef CONFIG_PREEMPT_RCU
 	int				rcu_read_lock_nesting;
@@ -1144,6 +1149,7 @@ struct task_struct {
 	raw_spinlock_t			pi_lock;
 
 	struct wake_q_node		wake_q;
+	int				wake_q_count;
 
 #ifdef CONFIG_RT_MUTEXES
 	/* PI waiters blocked on a rt_mutex held by this task: */
