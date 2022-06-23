@@ -28,6 +28,7 @@
 #include <linux/mm_types_task.h>
 #include <linux/task_io_accounting.h>
 #include <linux/pkg_stat.h>
+#include <linux/android_vendor.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -823,6 +824,7 @@ struct task_struct {
 	atomic_t			usage;
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
+	unsigned int			pc_flags;
 	unsigned int			ptrace;
 
 #ifdef CONFIG_SMP
@@ -871,8 +873,14 @@ struct task_struct {
 	u32 unfilter;
 	cpumask_t			cpus_requested;
 	bool				iowaited;
+	int				prev_on_rq;
+	int				prev_on_rq_cpu;
+	struct list_head		mvp_list;
 	bool low_latency;
 	bool rtg_high_prio;
+	u64				sum_exec_snapshot;
+	u64				total_exec;
+	int				mvp_prio;
 #endif
 
 #ifdef CONFIG_CGROUP_SCHED
@@ -1460,6 +1468,8 @@ struct task_struct {
 #ifdef CONFIG_MIGT
 	struct package_runtime_info pkg;
 #endif
+	ANDROID_VENDOR_DATA_ARRAY(1, 64);
+	ANDROID_OEM_DATA_ARRAY(1, 32);
 
 	struct {
 		struct work_struct work;
@@ -1690,6 +1700,14 @@ extern struct pid *cad_pid;
 #define PF_MUTEX_TESTER		0x20000000	/* Thread belongs to the rt mutex tester */
 #define PF_FREEZER_SKIP		0x40000000	/* Freezer should not count it as freezable */
 #define PF_SUSPEND_TASK		0x80000000      /* This thread called freeze_processes() and should not be frozen */
+
+/*
+ * Perf critical flags
+ */
+#define PC_LITTLE_AFFINE		0x00000001
+#define PC_PERF_AFFINE			0x00000002
+#define PC_PRIME_AFFINE			0x00000004
+#define PC_HP_AFFINE			0x00000008
 
 /*
  * Only the _current_ task can read/write to tsk->flags, but other

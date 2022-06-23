@@ -1,11 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM sched
+#undef TRACE_INCLUDE_PATH
+#define TRACE_INCLUDE_PATH trace/hooks
 #if !defined(_TRACE_HOOK_SCHED_H) || defined(TRACE_HEADER_MULTI_READ)
 #define _TRACE_HOOK_SCHED_H
+#include <linux/tracepoint.h>
 /*
  * Following tracepoints are not exported in tracefs and provide a
  * mechanism for vendor modules to hook and extend functionality
  */
-#if defined(CONFIG_TRACEPOINTS)
 struct task_struct;
 DECLARE_TRACE(android_rvh_select_task_rq_fair,
 	TP_PROTO(struct task_struct *p, int prev_cpu, int sd_flag, int wake_flags, int *new_cpu),
@@ -158,6 +162,11 @@ DECLARE_TRACE(android_rvh_after_enqueue_task,
 DECLARE_TRACE(android_rvh_after_dequeue_task,
 	TP_PROTO(struct rq *rq, struct task_struct *p),
 	TP_ARGS(rq, p));
-#endif
-#endif /* _TRACE_HOOK_SCHED_H */
 
+DECLARE_TRACE(android_rvh_do_sched_yield,
+	TP_PROTO(struct rq *rq),
+	TP_ARGS(rq));
+
+#endif /* _TRACE_HOOK_SCHED_H */
+/* This part must be outside protection */
+#include <trace/define_trace.h>

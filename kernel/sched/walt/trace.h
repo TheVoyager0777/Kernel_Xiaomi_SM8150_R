@@ -343,6 +343,94 @@ TRACE_EVENT(sched_find_best_target,
 		  __entry->target, __entry->backup)
 );
 
+DECLARE_EVENT_CLASS(walt_cfs_mvp_task_template,
+
+	TP_PROTO(struct task_struct *p, unsigned int limit),
+
+	TP_ARGS(p, limit),
+
+	TP_STRUCT__entry(
+		__array(char,		comm,	TASK_COMM_LEN)
+		__field(pid_t,		pid)
+		__field(int,		prio)
+		__field(int,		mvp_prio)
+		__field(int,		cpu)
+		__field(u64,		exec)
+		__field(unsigned int,	limit)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->pid		= p->pid;
+		__entry->prio		= p->prio;
+		__entry->mvp_prio	= p->mvp_prio;
+		__entry->cpu		= task_cpu(p);
+		__entry->exec		= p->total_exec;
+		__entry->limit		= limit;
+	),
+
+	TP_printk("comm=%s pid=%d prio=%d mvp_prio=%d cpu=%d exec=%llu limit=%u",
+		__entry->comm, __entry->pid, __entry->prio,
+		__entry->mvp_prio, __entry->cpu, __entry->exec,
+		__entry->limit)
+);
+
+/* called upon MVP task de-activation. exec will be more than limit */
+DEFINE_EVENT(walt_cfs_mvp_task_template, walt_cfs_deactivate_mvp_task,
+	     TP_PROTO(struct task_struct *p, unsigned int limit),
+	     TP_ARGS(p,limit));
+
+/* called upon when MVP is returned to run next */
+DEFINE_EVENT(walt_cfs_mvp_task_template, walt_cfs_mvp_pick_next,
+	     TP_PROTO(struct task_struct *p, unsigned int limit),
+	     TP_ARGS(p, limit));
+
+/* called upon when MVP (current) is not preempted by waking task */
+DEFINE_EVENT(walt_cfs_mvp_task_template, walt_cfs_mvp_wakeup_nopreempt,
+	     TP_PROTO(struct task_struct *p, unsigned int limit),
+	     TP_ARGS(p, limit));
+
+/* called upon when MVP (waking task) preempts the current */
+DEFINE_EVENT(walt_cfs_mvp_task_template, walt_cfs_mvp_wakeup_preempt,
+	     TP_PROTO(struct task_struct *p, unsigned int limit),
+	     TP_ARGS(p, limit));
+
+TRACE_EVENT(update_cpu_capacity,
+
+	TP_PROTO(int cpu, unsigned long rt_pressure, unsigned long capacity),
+
+	TP_ARGS(cpu, rt_pressure, capacity),
+
+	TP_STRUCT__entry(
+		__field(int, cpu)
+		__field(unsigned long, rt_pressure)
+		__field(unsigned long, capacity)
+		__field(unsigned long, arch_capacity)
+		__field(unsigned long, thermal_cap)
+		__field(unsigned long, max_possible_freq)
+		__field(unsigned long, max_freq)
+	),
+
+	TP_fast_assign(
+		struct sched_cluster *cluster = cpu_cluster(cpu);
+
+		__entry->cpu = cpu;
+		__entry->rt_pressure = rt_pressure;
+		__entry->capacity = capacity;
+		__entry->arch_capacity = arch_scale_cpu_capacity(NULL, cpu);
+		__entry->thermal_cap = arch_scale_cpu_capacity(NULL, cpu) -
+					arch_scale_thermal_pressure(cpu);
+		__entry->max_freq = cluster->max_freq;
+		__entry->max_possible_freq = cluster->max_possible_freq;
+	),
+
+	TP_printk("cpu=%d arch_capacity=%lu thermal_cap=%lu rt_pressure=%lu max_freq=%lu max_possible_freq=%lu capacity=%lu",
+			__entry->cpu, __entry->arch_capacity,
+			__entry->thermal_cap, __entry->rt_pressure,
+			__entry->max_freq, __entry->max_possible_freq,
+			__entry->capacity)
+
+);
 #endif /* _TRACE_WALT_H */
 
 #include "sched_hook.h"

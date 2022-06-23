@@ -7,19 +7,37 @@
 #include <linux/cpuidle.h>
 #include <linux/energy_model.h>
 #include <linux/android_vendor.h>
+#include "../../../kernel/sched/walt.h"
 
 extern int num_sched_clusters;
 extern cpumask_t __read_mostly **cpu_array;
 extern int cpu_l2_sibling[NR_CPUS];
 
 extern __read_mostly unsigned int walt_scale_demand_divisor;
-extern u64 walt_ktime_get_ns(void);
+
+extern bool walt_disabled;
+
+#define WALT_MVP_SLICE		3000000U
+#define WALT_MVP_LIMIT		(4 * WALT_MVP_SLICE)
+
+#define WALT_RTG_MVP		0
+#define WALT_BINDER_MVP		1
+#define WALT_TASK_BOOST_MVP	2
+
+#define WALT_NOT_MVP		-1
+
+#define is_mvp(p) (p->mvp_prio != WALT_NOT_MVP)
 
 #define walt_scale_demand(d) ((d)/walt_scale_demand_divisor)
 
 #define WALT_LOW_LATENCY_PROCFS		BIT(0)
 #define WALT_LOW_LATENCY_BINDER		BIT(1)
 #define WALT_LOW_LATENCY_PIPELINE	BIT(2)
+
+#define wts_to_ts(ts) ({ \
+		void *__mptr = (void *)(ts); \
+		((struct task_struct *)(__mptr - \
+			offsetof(struct task_struct, android_vendor_data1))); })
 
 extern bool walt_disabled;
 
@@ -37,6 +55,14 @@ struct compute_energy_output {
 	unsigned long	max_util[MAX_CLUSTERS];
 	u16		cost[MAX_CLUSTERS];
 	unsigned int	cluster_first_cpu[MAX_CLUSTERS];
+};
+
+struct walt_rotate_work {
+	struct work_struct w;
+	struct task_struct *src_task;
+	struct task_struct *dst_task;
+	int src_cpu;
+	int dst_cpu;
 };
 
 struct find_best_target_env {
@@ -70,6 +96,8 @@ extern __read_mostly unsigned int sysctl_sched_force_lb_enable;
 extern unsigned int sysctl_walt_rtg_cfs_boost_prio;
 extern struct ctl_table walt_table[];
 
+static DEFINE_PER_CPU(struct walt_rotate_work, walt_rotate_works);
+
 #define WALT_PANIC(condition)				\
 ({							\
 	if (unlikely(!!(condition)) && !in_sched_bug) {	\
@@ -95,13 +123,42 @@ extern struct ctl_table walt_table[];
 	}								\
 })
 
-extern void walt_cfs_init(void);
-extern void walt_create_util_to_cost(void);
+/* headers of modules */
+void do_trace_sched_yield(void);
+void do_trace_scheduler_tick(void);
+void walt_lb_tick(struct rq *rq);
+void walt_cfs_init(void);
+void walt_cfs_tick(struct rq *rq);
+void walt_create_util_to_cost(void);
+void walt_lb_check_for_rotation(struct rq *src_rq);
+void walt_cfs_enqueue_task(struct rq *rq, struct task_struct *p);
+void walt_cfs_dequeue_task(struct rq *rq, struct task_struct *p);
+void walt_get_indicies(struct task_struct *p, int *order_index,
+		int *end_index, int per_task_boost, bool is_boosted,
+		bool *energy_eval_needed);
+void walt_find_best_target(struct sched_domain *sd,
+					cpumask_t *candidates,
+					struct task_struct *p,
+					struct find_best_target_env *fbt_env);
+int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
+				     int sync, int sibling_count_hint);
 
 /* functions references fore modules */
 extern inline int walt_same_cluster(int src_cpu, int dst_cpu)
 {
 	return cpu_rq(src_cpu)->cluster == cpu_rq(dst_cpu)->cluster;
+}
+
+static inline bool walt_binder_low_latency_task(struct task_struct *p)
+{
+	return (p->low_latency & WALT_LOW_LATENCY_BINDER) &&
+		(task_util(p) < sysctl_walt_low_latency_task_threshold);
+}
+
+static inline bool walt_procfs_low_latency_task(struct task_struct *p)
+{
+	return (p->low_latency & WALT_LOW_LATENCY_PROCFS) &&
+		(task_util(p) < sysctl_walt_low_latency_task_threshold);
 }
 
 static inline bool walt_pipeline_low_latency_task(struct task_struct *p)
@@ -188,6 +245,16 @@ static inline bool select_cpu_same_energy(int cpu, int best_cpu, int prev_cpu)
 	 * pick the busy.
 	 */
 	return idle_cpu(best_cpu);
+}
+
+/*
+ * The policy of a RT boosted task (via PI mutex) still indicates it is
+ * a fair task, so use prio check as well. The prio check alone is not
+ * sufficient since idle task also has 120 priority.
+ */
+static inline bool walt_fair_task(struct task_struct *p)
+{
+	return p->prio >= MAX_RT_PRIO && !is_idle_task(p);
 }
 
 inline bool task_fits_capacity(struct task_struct *p,
@@ -278,3 +345,10 @@ static inline bool is_many_wakeup(int sibling_count_hint)
 
 static inline int sched_cpu_high_irqload(int cpu) { return 0; }
 #endif
+
+static inline bool is_mvp_task(struct rq *rq, struct task_struct *p)
+{
+	lockdep_assert_held(&rq->lock);
+	return !list_empty(&p->mvp_list) && p->mvp_list.next;
+}
+

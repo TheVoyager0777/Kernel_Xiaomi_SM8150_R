@@ -26,7 +26,6 @@
 #include <linux/sched/stat.h>
 #include <trace/events/sched.h>
 #include "walt/walt_refer.h"
-#include "walt.h"
 
 #include <trace/events/sched.h>
 

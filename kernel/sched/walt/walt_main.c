@@ -6,8 +6,8 @@
 #include <linux/ktime.h>
 #include "walt_refer.h"
 #include "trace.h"
-#include "../../../kernel/sched/walt.h"
 
+#define EARLY_DETECTION_DURATION 9500000
 
 static ktime_t ktime_last;
 static bool walt_ktime_suspended;
@@ -48,6 +48,13 @@ static inline void __sched_fork_init(struct task_struct *p)
 
 static void walt_init_new_task_load(struct task_struct *p)
 {
+	p->prev_on_rq = 0;
+	p->prev_on_rq_cpu = -1;
+
+	INIT_LIST_HEAD(&p->mvp_list);
+	p->sum_exec_snapshot = 0;
+	p->total_exec = 0;
+	p->mvp_prio = WALT_NOT_MVP;
 	__sched_fork_init(p);
 }
 
@@ -55,6 +62,12 @@ static void walt_init_existing_task_load(struct task_struct *p)
 {
 	walt_init_new_task_load(p);
 	cpumask_copy(&p->cpus_requested, &p->cpus_mask);
+}
+
+static void sched_init_rq(struct rq *rq)
+{
+	rq->num_mvp_tasks = 0;
+	INIT_LIST_HEAD(&rq->mvp_tasks);
 }
 
 static void init_cpu_array(void)
@@ -146,7 +159,6 @@ static void find_cache_siblings(void)
 
 static void walt_update_cluster_topology(void)
 {
-	walt_cfs_init();
 	init_cpu_array();
 	build_cpu_array();
 	find_cache_siblings();
@@ -224,6 +236,8 @@ static void android_vh_scheduler_tick(void *unused, struct rq *rq)
 	if (update_preferred_cluster(grp, rq->curr, old_load, true))
 		set_preferred_cluster(grp);
 	rcu_read_unlock();
+
+	walt_lb_tick(rq);
 }
 
 static void android_rvh_schedule(void *unused, struct task_struct *prev,
@@ -258,11 +272,21 @@ static void register_walt_hooks(void)
 
 static int walt_init_stop_handler(void *data)
 {
+	int cpu;
 	struct task_struct *g, *p;
 
 	do_each_thread(g, p) {
 		walt_init_existing_task_load(p);
 	} while_each_thread(g, p);
+
+	for_each_possible_cpu(cpu) {
+		struct rq *rq = cpu_rq(cpu);
+
+		/* Create task members for idle thread */
+		init_new_task_load(rq->idle);
+
+		sched_init_rq(rq);
+	}
 
 	walt_update_cluster_topology();
 	walt_disabled = false;

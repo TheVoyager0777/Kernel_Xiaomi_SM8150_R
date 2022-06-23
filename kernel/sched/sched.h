@@ -955,7 +955,8 @@ struct rq {
 
 	struct callback_head *balance_callback;
 
-	unsigned char idle_balance;
+	unsigned char		nohz_idle_balance;
+	unsigned char		idle_balance;
 
 	unsigned long misfit_task_load;
 
@@ -1068,6 +1069,11 @@ struct rq {
 	struct cpuidle_state *idle_state;
 	int idle_state_idx;
 #endif
+	int			num_mvp_tasks;
+	struct list_head	mvp_tasks;
+
+	ANDROID_VENDOR_DATA_ARRAY(1, 96);
+	ANDROID_OEM_DATA_ARRAY(1, 16);
 };
 
 static inline int cpu_of(struct rq *rq)
