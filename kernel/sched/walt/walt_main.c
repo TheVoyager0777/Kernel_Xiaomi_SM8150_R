@@ -3,41 +3,54 @@
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 #include <linux/syscore_ops.h>
+#include <trace/hooks/sched.h>
 #include <linux/ktime.h>
 #include "walt_refer.h"
 #include "trace.h"
 
 #define EARLY_DETECTION_DURATION 9500000
 
-static ktime_t ktime_last;
-static bool walt_ktime_suspended;
 static bool walt_clusters_parsed;
 cpumask_t __read_mostly **cpu_array;
 __read_mostly int num_sched_clusters;
 
-u64 walt_ktime_get_ns(void)
+static inline bool is_ed_enabled(void)
 {
-	if (unlikely(walt_ktime_suspended))
-		return ktime_to_ns(ktime_last);
-	return ktime_get_ns();
+	return (walt_rotation_enabled || (boost_policy != SCHED_BOOST_NONE));
 }
 
-static void walt_resume(void)
+static inline bool is_ed_task(struct task_struct *p, u64 wallclock)
 {
-	walt_ktime_suspended = false;
+	return (wallclock - p->last_wake_ts >= EARLY_DETECTION_DURATION);
 }
 
-static int walt_suspend(void)
+static bool is_ed_task_present(struct rq *rq, u64 wallclock, struct task_struct *deq_task)
 {
-	ktime_last = ktime_get();
-	walt_ktime_suspended = true;
-	return 0;
-}
+	struct task_struct *p;
+	int loop_max = 10;
 
-static struct syscore_ops walt_syscore_ops = {
-	.resume		= walt_resume,
-	.suspend	= walt_suspend
-};
+	rq->ed_task = NULL;
+
+	if (!is_ed_enabled() || !rq->cfs.h_nr_running)
+		return false;
+
+	list_for_each_entry(p, &rq->cfs_tasks, se.group_node) {
+		if (!loop_max)
+			break;
+
+		if (p == deq_task)
+			continue;
+
+		if (is_ed_task(p, wallclock)) {
+			rq->ed_task = p;
+			return true;
+		}
+
+		loop_max--;
+	}
+
+	return false;
+}
 
 static inline void __sched_fork_init(struct task_struct *p)
 {
@@ -169,25 +182,90 @@ static void walt_update_cluster_topology(void)
 
 bool walt_disabled = true;
 
-#if 0
-static void walt_update_tg_pointer(struct cgroup_subsys_state *css)
+static void android_rvh_enqueue_task(void *unused, struct rq *rq, struct task_struct *p)
 {
-	if (!strcmp(css->cgroup->kn->name, "top-app"))
-		walt_init_topapp_tg(css_tg(css));
-	else if (!strcmp(css->cgroup->kn->name, "foreground"))
-		walt_init_foreground_tg(css_tg(css));
-	else
-		walt_init_tg(css_tg(css));
-}
+	u64 wallclock = sched_ktime_clock();
+	bool double_enqueue = false;
 
-static void android_rvh_cpu_cgroup_online(void *unused, struct cgroup_subsys_state *css)
-{
 	if (unlikely(walt_disabled))
 		return;
 
-	walt_update_tg_pointer(css);
+	lockdep_assert_held(&rq->lock);
+
+	if (p->cpu != cpu_of(rq))
+		WALT_BUG(p, "enqueuing on rq %d when task->cpu is %d\n",
+				cpu_of(rq), p->cpu);
+
+	/* catch double enqueue */
+	if (p->prev_on_rq == 1) {
+		WALT_BUG(p, "double enqueue detected: task_cpu=%d new_cpu=%d\n",
+			 task_cpu(p), cpu_of(rq));
+		double_enqueue = true;
+	}
+
+	p->prev_on_rq = 1;
+	p->prev_on_rq_cpu = cpu_of(rq);
+
+	p->last_enqueued_ts = wallclock;
+	sched_update_nr_prod(rq->cpu, 1);
+
+	if (walt_fair_task(p)) {
+		p->misfit = !task_fits_max(p, rq->cpu);
+		if (!double_enqueue)
+			inc_rq_walt_stats(rq, p);
+		walt_cfs_enqueue_task(rq, p);
+	}
+
+	if (!double_enqueue)
+		walt_inc_cumulative_runnable_avg(rq, p);
+	trace_sched_enq_deq_task(p, 1, cpumask_bits(&p->cpus_mask)[0], is_mvp(p));
 }
-#endif
+
+static void android_rvh_dequeue_task(void *unused, struct rq *rq, struct task_struct *p)
+{
+	bool double_dequeue = false;
+
+	if (unlikely(walt_disabled))
+		return;
+
+	lockdep_assert_held(&rq->lock);
+
+	/*
+	 * a task can be enqueued before walt is started, and dequeued after.
+	 * therefore the check to ensure that prev_on_rq_cpu is needed to prevent
+	 * an invalid failure.
+	 */
+	if (p->prev_on_rq_cpu >= 0 && p->prev_on_rq_cpu != cpu_of(rq))
+		WALT_BUG(p, "dequeue cpu %d not same as enqueue %d\n",
+			 cpu_of(rq), p->prev_on_rq_cpu);
+
+	/* no longer on a cpu */
+	p->prev_on_rq_cpu = -1;
+
+	/* catch double deq */
+	if (p->prev_on_rq == 2) {
+		WALT_BUG(p, "double dequeue detected: task_cpu=%d new_cpu=%d\n",
+			 task_cpu(p), cpu_of(rq));
+		double_dequeue = true;
+	}
+
+	p->prev_on_rq = 2;
+	if (p == rq->ed_task)
+		is_ed_task_present(rq, sched_ktime_clock(), p);
+
+	sched_update_nr_prod(rq->cpu, -1);
+
+	if (walt_fair_task(p)) {
+		if (!double_dequeue)
+			dec_rq_walt_stats(rq, p);
+		walt_cfs_dequeue_task(rq, p);
+	}
+
+	if (!double_dequeue)
+		walt_dec_cumulative_runnable_avg(rq, p);
+
+	trace_sched_enq_deq_task(p, 0, cpumask_bits(&p->cpus_mask)[0], is_mvp(p));
+}
 
 static void android_rvh_update_misfit_status(void *unused, struct task_struct *p,
 		struct rq *rq, bool *need_update)
@@ -215,7 +293,7 @@ static void android_rvh_update_misfit_status(void *unused, struct task_struct *p
 
 	change = misfit - old_misfit;
 	if (change) {
-		sched_update_nr_prod(rq->cpu, 0, true);
+		sched_update_nr_prod(rq->cpu, 0);
 		p->misfit = misfit;
 		rq->walt_stats.nr_big_tasks += change;
 		BUG_ON(rq->walt_stats.nr_big_tasks < 0);
@@ -262,10 +340,9 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 
 static void register_walt_hooks(void)
 {
-/*
-	register_trace_android_rvh_cpu_cgroup_online(android_rvh_cpu_cgroup_online, NULL);
-*/
         register_trace_android_rvh_update_misfit_status(android_rvh_update_misfit_status, NULL);
+	register_trace_android_rvh_after_enqueue_task(android_rvh_enqueue_task, NULL);
+	register_trace_android_rvh_after_dequeue_task(android_rvh_dequeue_task, NULL);
         register_trace_android_vh_scheduler_tick(android_vh_scheduler_tick, NULL);
 	register_trace_android_rvh_schedule(android_rvh_schedule, NULL);
 }
@@ -298,8 +375,6 @@ static void walt_init(struct work_struct *work)
 {
 
         register_walt_hooks();
-
-	register_syscore_ops(&walt_syscore_ops);
 
 	walt_cfs_init();
 

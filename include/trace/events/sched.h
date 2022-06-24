@@ -10,6 +10,16 @@
 #include <linux/binfmts.h>
 #include <linux/sched/idle.h>
 
+struct rq;
+
+DECLARE_TRACE(sched_update_nr_running_tp,
+	TP_PROTO(struct rq *rq, int change),
+	TP_ARGS(rq, change));
+
+DECLARE_TRACE(sched_cpu_capacity_tp,
+	TP_PROTO(struct rq *rq),
+	TP_ARGS(rq));
+
 #ifndef CONFIG_MINIMAL_TRACING_FOR_IORAP
 /*
  * Tracepoint for calling kthread_stop, performed to end a kthread:
@@ -102,7 +112,6 @@ TRACE_EVENT(sched_enq_deq_task,
 #else
 #define trace_sched_kthread_stop(...) {}
 #define trace_sched_kthread_stop_ret(...) {}
-#define trace_sched_enq_deq_task(...) {}
 #endif /* CONFIG_MINIMAL_TRACING_FOR_IORAP */
 
 /*

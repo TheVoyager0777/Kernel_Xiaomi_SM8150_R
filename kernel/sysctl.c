@@ -97,6 +97,8 @@
 #include <linux/nmi.h>
 #endif
 
+#include "sched/walt/walt_refer.h"
+
 #if defined(CONFIG_SYSCTL)
 
 /* External variables not in a header file. */
@@ -322,6 +324,11 @@ static struct ctl_table sysctl_base_table[] = {
 		.procname	= "kernel",
 		.mode		= 0555,
 		.child		= kern_table,
+	},
+	{
+		.procname	= "walt",
+		.mode		= 0555,
+		.child		= walt_table,
 	},
 	{
 		.procname	= "vm",

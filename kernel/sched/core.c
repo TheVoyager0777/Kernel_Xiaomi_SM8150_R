@@ -1525,7 +1525,7 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	uclamp_rq_inc(rq, p);
 	p->sched_class->enqueue_task(rq, p, flags);
 	walt_update_last_enqueue(p);
-	trace_sched_enq_deq_task(p, 1, cpumask_bits(&p->cpus_allowed)[0]);
+        do_trace_enqueue_task();
 }
 
 static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
@@ -1544,7 +1544,7 @@ static inline void dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 	if (p == rq->ed_task)
 		early_detection_notify(rq, sched_ktime_clock());
 #endif
-	trace_sched_enq_deq_task(p, 0, cpumask_bits(&p->cpus_allowed)[0]);
+        do_trace_dequeue_task();
 }
 
 void activate_task(struct rq *rq, struct task_struct *p, int flags)
@@ -4449,6 +4449,7 @@ static void __sched notrace __schedule(bool preempt)
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
 
+	do_trace_rvh_schedule();
 	wallclock = sched_ktime_clock();
 	if (likely(prev != next)) {
 		if (!prev->on_rq)
@@ -8721,5 +8722,10 @@ void sched_exit(struct task_struct *p)
 	free_task_load_ptrs(p);
 }
 #endif /* CONFIG_SCHED_WALT */
+
+void call_trace_sched_update_nr_running(struct rq *rq, int count)
+{
+        trace_sched_update_nr_running_tp(rq, count);
+}
 
 __read_mostly bool sched_predl = 1;

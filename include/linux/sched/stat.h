@@ -23,10 +23,10 @@ extern unsigned long nr_iowait_cpu(int cpu);
 extern void get_iowait_load(unsigned long *nr_waiters, unsigned long *load);
 
 #ifdef CONFIG_SMP
-extern void sched_update_nr_prod(int cpu, long delta, bool inc);
+extern void sched_update_nr_prod(int cpu, int enq);
 extern unsigned int sched_get_cpu_util(int cpu);
 #else
-static inline void sched_update_nr_prod(int cpu, long delta, bool inc)
+static inline void sched_update_nr_prod(int cpu, int enq);
 {
 }
 static inline unsigned int sched_get_cpu_util(int cpu)

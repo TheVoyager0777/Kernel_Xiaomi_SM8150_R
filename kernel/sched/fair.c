@@ -3721,7 +3721,10 @@ inline bool task_fits_capacity(struct task_struct *p, long capacity,
 
 static inline void update_misfit_status(struct task_struct *p, struct rq *rq)
 {
-	if (!static_branch_unlikely(&sched_asym_cpucapacity))
+	bool need_update = true;
+
+	trace_android_rvh_update_misfit_status(p, rq, &need_update);
+	if (!static_branch_unlikely(&sched_asym_cpucapacity) || !need_update)
 		return;
 
 	if (!p) {
@@ -9689,6 +9692,7 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 	if (!capacity)
 		capacity = 1;
 
+	trace_android_rvh_update_cpu_capacity(cpu, &capacity);
 	cpu_rq(cpu)->cpu_capacity = capacity;
 	sdg->sgc->capacity = capacity;
 	sdg->sgc->min_capacity = capacity;
@@ -13075,7 +13079,7 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 
 		raw_spin_lock(&migration_lock);
 		rcu_read_lock();
-		new_cpu = find_energy_efficient_cpu(p, prev_cpu, 0, 1);
+		new_cpu = walt_find_energy_efficient_cpu(p, prev_cpu, 0, 1);
 		rcu_read_unlock();
 		if ((new_cpu != -1) && (new_cpu != prev_cpu) &&
 		    (capacity_orig_of(new_cpu) > capacity_orig_of(prev_cpu))) {

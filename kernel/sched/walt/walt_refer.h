@@ -126,6 +126,9 @@ static DEFINE_PER_CPU(struct walt_rotate_work, walt_rotate_works);
 /* headers of modules */
 void do_trace_sched_yield(void);
 void do_trace_scheduler_tick(void);
+void do_trace_enqueue_task(void);
+void do_trace_dequeue_task(void);
+void do_trace_rvh_schedule(void);
 void walt_lb_tick(struct rq *rq);
 void walt_cfs_init(void);
 void walt_cfs_tick(struct rq *rq);

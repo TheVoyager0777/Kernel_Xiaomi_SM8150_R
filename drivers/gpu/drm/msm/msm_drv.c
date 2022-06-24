@@ -40,6 +40,7 @@
 
 #include <linux/of_address.h>
 #include <linux/kthread.h>
+#include <linux/cpumask.h>
 #include <uapi/linux/sched/types.h>
 #include <drm/drm_of.h>
 #include <soc/qcom/boot_stats.h>

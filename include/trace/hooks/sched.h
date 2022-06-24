@@ -127,6 +127,11 @@ struct cgroup_subsys_state;
 DECLARE_TRACE(android_rvh_cpu_cgroup_online,
 	TP_PROTO(struct cgroup_subsys_state *css),
 	TP_ARGS(css));
+
+DECLARE_TRACE(android_rvh_update_cpu_capacity,
+	TP_PROTO(int cpu, unsigned long *capacity),
+	TP_ARGS(cpu, capacity));
+
 DECLARE_TRACE(android_rvh_update_misfit_status,
 	TP_PROTO(struct task_struct *p, struct rq *rq, bool *need_update),
 	TP_ARGS(p, rq, need_update));

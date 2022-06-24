@@ -18,6 +18,7 @@
 
 #include <linux/msm_drm_notify.h>
 #include <linux/notifier.h>
+#include <linux/pm_qos.h>
 
 #include "msm_drv.h"
 #include "msm_kms.h"
@@ -599,8 +600,6 @@ static void complete_commit(struct msm_commit *c)
 	drm_atomic_helper_cleanup_planes(dev, state);
 
 	kms->funcs->complete_commit(kms, state);
-
-	priv->commit_end_time =  ktime_get(); //commit end time
 
 	end_atomic(priv, c->crtc_mask, c->plane_mask);
 }

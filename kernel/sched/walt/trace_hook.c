@@ -24,3 +24,28 @@ void do_trace_scheduler_tick(void)
 }
 EXPORT_SYMBOL(do_trace_scheduler_tick);
 
+void do_trace_enqueue_task(void)
+{
+     struct task_struct *p;
+     struct rq *rq;
+
+     trace_android_rvh_after_enqueue_task(rq, p);
+}
+EXPORT_SYMBOL(do_trace_enqueue_task);
+
+void do_trace_dequeue_task(void)
+{
+     struct task_struct *p;
+     struct rq *rq;
+
+     trace_android_rvh_after_dequeue_task(rq, p);
+}
+EXPORT_SYMBOL(do_trace_dequeue_task);
+
+void do_trace_rvh_schedule(void)
+{
+    struct task_struct *prev, *next;
+    struct rq *rq;
+
+    trace_android_rvh_schedule(prev, next, rq);
+}

@@ -173,13 +173,12 @@ static inline void update_busy_hyst_end_time(int cpu, bool dequeue,
 /**
  * sched_update_nr_prod
  * @cpu: The core id of the nr running driver.
- * @delta: Adjust nr by 'delta' amount
- * @inc: Whether we are increasing or decreasing the count
+ * @enq: enqueue/dequeue/misfit happening on this CPU.
  * @return: N/A
  *
  * Update average with latest nr_running value for CPU
  */
-void sched_update_nr_prod(int cpu, long delta, bool inc)
+void sched_update_nr_prod(int cpu, int enq)
 {
 	u64 diff;
 	u64 curr_time;
@@ -191,14 +190,14 @@ void sched_update_nr_prod(int cpu, long delta, bool inc)
 	diff = curr_time - per_cpu(last_time, cpu);
 	BUG_ON((s64)diff < 0);
 	per_cpu(last_time, cpu) = curr_time;
-	per_cpu(nr, cpu) = nr_running + (inc ? delta : -delta);
-
-	BUG_ON((s64)per_cpu(nr, cpu) < 0);
+	per_cpu(nr, cpu) = cpu_rq(cpu)->nr_running;
 
 	if (per_cpu(nr, cpu) > per_cpu(nr_max, cpu))
 		per_cpu(nr_max, cpu) = per_cpu(nr, cpu);
 
-	update_busy_hyst_end_time(cpu, !inc, nr_running, curr_time);
+	/* Don't update hyst time for misfit tasks */
+	if (enq)
+		update_busy_hyst_end_time(cpu, enq, nr_running, curr_time);
 
 	per_cpu(nr_prod_sum, cpu) += nr_running * diff;
 	per_cpu(nr_big_prod_sum, cpu) += walt_big_tasks(cpu) * diff;

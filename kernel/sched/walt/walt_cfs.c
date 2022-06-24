@@ -819,38 +819,15 @@ fail:
 	return -EPERM;
 }
 
-#if 0
-void walt_cfs_tick(struct rq *rq)
-{
-	struct task_struct *p = rq->curr;
-
-	if (unlikely(walt_disabled))
-		return;
-
-	raw_spin_lock(&rq->lock);
-
-	if (list_empty(&p->mvp_list) || (p->mvp_list.next == NULL))
-		goto out;
-
-	walt_cfs_account_mvp_runtime(rq, rq->curr);
-	/*
-	 * If the current is not MVP means, we have to re-schedule to
-	 * see if we can run any other task including MVP tasks.
-	 */
-	if ((p->mvp_tasks.next != &p->mvp_list) && rq->cfs.h_nr_running > 1)
-		resched_curr(rq);
-
-out:
-	raw_spin_unlock(&rq->lock);
-}
-#endif
-
 static void
 walt_select_task_rq_fair(void *unused, struct task_struct *p, int prev_cpu,
 				int sd_flag, int wake_flags, int *target_cpu)
 {
 	int sync;
 	int sibling_count_hint;
+
+	if (unlikely(walt_disabled))
+		return;
 
 	sync = (wake_flags & WF_SYNC) && !(current->flags & PF_EXITING);
 	sibling_count_hint = p->wake_q_count;

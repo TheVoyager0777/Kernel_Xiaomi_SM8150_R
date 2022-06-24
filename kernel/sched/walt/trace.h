@@ -431,6 +431,53 @@ TRACE_EVENT(update_cpu_capacity,
 			__entry->capacity)
 
 );
+
+TRACE_EVENT(sched_enq_deq_task,
+
+	TP_PROTO(struct task_struct *p, bool enqueue, unsigned int cpus_allowed, bool mvp),
+
+	TP_ARGS(p, enqueue, cpus_allowed, mvp),
+
+	TP_STRUCT__entry(
+		__array(char,		comm, TASK_COMM_LEN)
+		__field(pid_t,		pid)
+		__field(int,		prio)
+		__field(int,		cpu)
+		__field(bool,		enqueue)
+		__field(unsigned int,	nr_running)
+		__field(unsigned int,	rt_nr_running)
+		__field(unsigned int,	cpus_allowed)
+		__field(unsigned int,	demand)
+		__field(unsigned int,	pred_demand)
+		__field(bool,		compat_thread)
+		__field(bool,		mvp)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
+		__entry->pid		= p->pid;
+		__entry->prio		= p->prio;
+		__entry->cpu		= task_cpu(p);
+		__entry->enqueue	= enqueue;
+		__entry->nr_running	= task_rq(p)->nr_running;
+		__entry->rt_nr_running	= task_rq(p)->rt.rt_nr_running;
+		__entry->cpus_allowed	= cpus_allowed;
+		__entry->demand		= task_load(p);
+		__entry->pred_demand	= task_pl(p);
+		__entry->compat_thread	= is_compat_thread(task_thread_info(p));
+		__entry->mvp		= mvp;
+	),
+
+	TP_printk("cpu=%d %s comm=%s pid=%d prio=%d nr_running=%u rt_nr_running=%u affine=%x demand=%u pred_demand=%u is_compat_t=%d mvp=%d",
+			__entry->cpu,
+			__entry->enqueue ? "enqueue" : "dequeue",
+			__entry->comm, __entry->pid,
+			__entry->prio, __entry->nr_running,
+			__entry->rt_nr_running,
+			__entry->cpus_allowed, __entry->demand,
+			__entry->pred_demand,
+			__entry->compat_thread, __entry->mvp)
+);
 #endif /* _TRACE_WALT_H */
 
 #include "sched_hook.h"

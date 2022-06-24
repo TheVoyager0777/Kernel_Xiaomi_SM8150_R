@@ -144,6 +144,8 @@ extern void init_sched_groups_capacity(int cpu, struct sched_domain *sd);
 static inline void cpu_load_update_active(struct rq *this_rq) { }
 #endif
 
+extern void call_trace_sched_update_nr_running(struct rq *rq, int count);
+
 /*
  * Helpers for converting nanosecond timing to jiffy resolution
  */
@@ -1951,30 +1953,9 @@ static inline void sched_update_tick_dependency(struct rq *rq)
 static inline void sched_update_tick_dependency(struct rq *rq) { }
 #endif
 
-static inline void add_nr_running(struct rq *rq, unsigned count)
-{
-	unsigned prev_nr = rq->nr_running;
+inline void add_nr_running(struct rq *rq, unsigned count);
 
-	sched_update_nr_prod(cpu_of(rq), count, true);
-	rq->nr_running = prev_nr + count;
-
-	if (prev_nr < 2 && rq->nr_running >= 2) {
-#ifdef CONFIG_SMP
-		if (!READ_ONCE(rq->rd->overload))
-			WRITE_ONCE(rq->rd->overload, 1);
-#endif
-	}
-
-	sched_update_tick_dependency(rq);
-}
-
-static inline void sub_nr_running(struct rq *rq, unsigned count)
-{
-	sched_update_nr_prod(cpu_of(rq), count, false);
-	rq->nr_running -= count;
-	/* Check if we still need preemption */
-	sched_update_tick_dependency(rq);
-}
+inline void sub_nr_running(struct rq *rq, unsigned count);
 
 static inline void rq_last_tick_reset(struct rq *rq)
 {

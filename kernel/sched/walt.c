@@ -3863,3 +3863,33 @@ unlock_mutex:
 	return ret;
 }
 #endif
+
+inline void add_nr_running(struct rq *rq, unsigned count)
+{
+	unsigned prev_nr = rq->nr_running;
+
+	rq->nr_running = prev_nr + count;
+	if (trace_sched_update_nr_running_tp_enabled()) {
+		call_trace_sched_update_nr_running(rq, count);
+	}
+
+#ifdef CONFIG_SMP
+	if (prev_nr < 2 && rq->nr_running >= 2) {
+		if (!READ_ONCE(rq->rd->overload))
+			WRITE_ONCE(rq->rd->overload, 1);
+	}
+#endif
+
+	sched_update_tick_dependency(rq);
+}
+
+inline void sub_nr_running(struct rq *rq, unsigned count)
+{
+	rq->nr_running -= count;
+	if (trace_sched_update_nr_running_tp_enabled()) {
+		call_trace_sched_update_nr_running(rq, -count);
+	}
+
+	/* Check if we still need preemption */
+	sched_update_tick_dependency(rq);
+}
