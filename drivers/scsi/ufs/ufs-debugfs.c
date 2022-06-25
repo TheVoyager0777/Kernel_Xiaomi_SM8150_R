@@ -1697,19 +1697,7 @@ static int ufsdbg_read_err_state(void *data, u64 *val)
 
 	return 0;
 }
-
-void ufsdbg_set_err_state(struct ufs_hba *hba)
-{
-	hba->debugfs_files.err_occurred = true;
-	dump_stack();
-}
-
-void ufsdbg_clr_err_state(struct ufs_hba *hba)
-{
-	hba->debugfs_files.err_occurred = false;
-}
-
-DEFINE_DEBUGFS_ATTRIBUTE(ufsdbg_err_state,
+DEFINE_SIMPLE_ATTRIBUTE(ufsdbg_err_state,
 			ufsdbg_read_err_state,
 			ufsdbg_clear_err_state,
 			"%llu\n");

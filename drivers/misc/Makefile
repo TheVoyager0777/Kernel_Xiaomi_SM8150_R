@@ -96,5 +96,3 @@ obj-$(CONFIG_AKM09970)          += akm09970.o
 obj-$(CONFIG_TI_DRV8846) 	+= drv8846.o
 obj-$(CONFIG_SIMTRAY_STATUS) += simtray.o
 obj-y				+= lyb_taskmmu.o
-obj-$(CONFIG_MI_MEMORY_SYSFS)	+= mi-memory/
-
