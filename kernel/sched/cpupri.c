@@ -35,6 +35,8 @@
 #include <linux/slab.h>
 #include "cpupri.h"
 
+#include <trace/hooks/sched.h>
+
 /* Convert between a 140 based task->prio, and our 102 based cpupri */
 static int convert_prio(int prio)
 {
@@ -94,6 +96,7 @@ int cpupri_find(struct cpupri *cp, struct task_struct *p,
 	int idx = 0;
 	int task_pri = convert_prio(p->prio);
 	bool drop_nopreempts = task_pri <= MAX_RT_PRIO;
+	bool drop_vendor = true;
 
 	BUG_ON(task_pri >= CPUPRI_NR_PRIORITIES);
 
@@ -130,6 +133,12 @@ retry:
 
 		if (cpumask_any_and(&p->cpus_allowed, vec->mask) >= nr_cpu_ids)
 			continue;
+
+                if (drop_vendor)
+			trace_android_rvh_cpupri_find_fitness(p, lowest_mask);
+
+		if (!lowest_mask)
+			return 1;
 
 		if (lowest_mask) {
 			cpumask_and(lowest_mask, &p->cpus_allowed, vec->mask);

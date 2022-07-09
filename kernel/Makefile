@@ -116,6 +116,8 @@ obj-$(CONFIG_TORTURE_TEST) += torture.o
 
 obj-$(CONFIG_HAS_IOMEM) += memremap.o
 
+obj-$(CONFIG_OPLUS_FEATURE_UIFRIST_HEAVYLOAD) += special_opt/
+
 obj-y += mi_iolimit_step.o
 obj-y += mi_iolimit_token.o
 obj-y += mi_iolimit_common.o

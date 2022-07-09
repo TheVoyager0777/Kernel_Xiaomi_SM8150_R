@@ -172,6 +172,14 @@ DECLARE_TRACE(android_rvh_do_sched_yield,
 	TP_PROTO(struct rq *rq),
 	TP_ARGS(rq));
 
+DECLARE_TRACE(android_rvh_find_best_target,
+	TP_PROTO(struct task_struct *p, int cpu, int *ignore),
+	TP_ARGS(p, cpu, ignore));
+struct cpumask;
+DECLARE_TRACE(android_rvh_cpupri_find_fitness,
+	TP_PROTO(struct task_struct *p, struct cpumask *lowest_mask),
+	TP_ARGS(p, lowest_mask));
+
 #endif /* _TRACE_HOOK_SCHED_H */
 /* This part must be outside protection */
 #include <trace/define_trace.h>

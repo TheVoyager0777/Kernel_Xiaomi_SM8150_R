@@ -138,6 +138,7 @@ void walt_find_best_target(struct sched_domain *sd,
 	unsigned int target_nr_rtg_high_prio = UINT_MAX;
 	bool rtg_high_prio_task = task_rtg_high_prio(p);
 	cpumask_t visit_cpus;
+	int ignore = -1;
 
 	/* Find start CPU based on boost value */
 	start_cpu = fbt_env->start_cpu;
@@ -187,6 +188,12 @@ void walt_find_best_target(struct sched_domain *sd,
 			struct rq *rq = cpu_rq(i);
 
 			trace_sched_cpu_util(i);
+			
+			trace_android_rvh_find_best_target(p, i, &ignore);
+			if (ignore > 0) {
+				continue;
+			}
+
 			/* record the prss as we visit cpus in a cluster */
 			fbt_env->prs[i] = rq->prev_runnable_sum + rq->grp_time.prev_runnable_sum;
 
