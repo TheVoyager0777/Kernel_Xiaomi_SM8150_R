@@ -607,8 +607,7 @@ found:
 	 * unconditional bounce may prevent leaking swiotlb content (i.e.
 	 * kernel memory) to user-space.
 	 */
-	if (orig_addr)
-		swiotlb_bounce(orig_addr, tlb_addr, size, DMA_TO_DEVICE);
+	swiotlb_bounce(orig_addr, tlb_addr, size, DMA_TO_DEVICE);
 	return tlb_addr;
 }
 EXPORT_SYMBOL_GPL(swiotlb_tbl_map_single);
