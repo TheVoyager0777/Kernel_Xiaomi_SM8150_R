@@ -2,6 +2,7 @@
  * gadget.c - DesignWare USB3 DRD Controller Gadget Framework Link
  *
  * Copyright (C) 2010-2011 Texas Instruments Incorporated - http://www.ti.com
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * Authors: Felipe Balbi <balbi@ti.com>,
  *	    Sebastian Andrzej Siewior <bigeasy@linutronix.de>
@@ -1201,7 +1202,6 @@ static void __dwc3_prepare_one_trb(struct dwc3_ep *dep, struct dwc3_trb *trb,
 	 * Add a write memory barrier to prevent CPU re-ordering.
 	 */
 	wmb();
-
 	trb->ctrl |= DWC3_TRB_CTRL_HWO;
 
 	dwc3_ep_inc_enq(dep);
@@ -1999,10 +1999,9 @@ static int dwc3_gadget_wakeup_int(struct dwc3 *dwc)
 	case DWC3_LINK_STATE_RESET:
 	case DWC3_LINK_STATE_RX_DET:	/* in HS, means Early Suspend */
 	case DWC3_LINK_STATE_U3:	/* in HS, means SUSPEND */
-	case DWC3_LINK_STATE_U2:	/* in HS, means Sleep (L1) */
-	case DWC3_LINK_STATE_U1:
 	case DWC3_LINK_STATE_RESUME:
 		break;
+	case DWC3_LINK_STATE_U1:
 		if (dwc->gadget.speed < USB_SPEED_SUPER) {
 			link_recover_only = true;
 			break;
@@ -2328,11 +2327,8 @@ static int dwc3_gadget_pullup(struct usb_gadget *g, int is_on)
 
 		ret = wait_for_completion_timeout(&dwc->ep0_in_setup,
 				msecs_to_jiffies(DWC3_PULL_UP_TIMEOUT));
-		if (ret == 0) {
+		if (ret == 0)
 			dev_warn(dwc->dev, "timed out waiting for SETUP phase\n");
-			dbg_event(0xFF, "Pullup timeout put",
-				atomic_read(&dwc->dev->power.usage_count));
-		}
 	}
 
 	disable_irq(dwc->irq);

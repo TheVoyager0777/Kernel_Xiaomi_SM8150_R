@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -60,22 +61,6 @@
 #define dev_dbg dev_info
 #undef pr_debug
 #define pr_debug pr_info
-#undef dev_info
-#define dev_info(x, ...)
-#undef dev_dbg
-#define dev_dbg(x, ...)
-#undef dev_err
-#define dev_err(x, ...)
-#undef pr_info
-#define pr_info(x, ...)
-#undef pr_debug
-#define pr_debug(x, ...)
-#undef pr_error
-#define pr_error(x, ...)
-#undef printk
-#define printk(x, ...)
-#undef printk_deferred
-#define printk_deferred(x, ...)
 
 
 #define SDP_CONNETION_CHECK_TIME 10000 /* in ms */

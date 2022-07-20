@@ -2,6 +2,7 @@
  * f_fs.c -- user mode file system API for USB composite function controllers
  *
  * Copyright (C) 2010 Samsung Electronics
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Author: Michal Nazarewicz <mina86@mina86.com>
  *
  * Based on inode.c (GadgetFS) which was:
@@ -1694,6 +1695,7 @@ ffs_fs_mount(struct file_system_type *t, int flags,
 	rv = mount_nodev(t, flags, &data, ffs_sb_fill);
 	if (IS_ERR(rv) && data.ffs_data)
 		ffs_data_put(data.ffs_data);
+
 	return rv;
 }
 
@@ -2066,19 +2068,21 @@ static void ffs_epfiles_destroy(struct ffs_epfile *epfiles, unsigned count)
 
 static void ffs_func_eps_disable(struct ffs_function *func)
 {
-	struct ffs_ep *ep         = func->eps;
-	struct ffs_data *ffs      = func->ffs;
-	struct ffs_epfile *epfile = func->ffs->epfiles;
-	unsigned count            = func->ffs->eps_count;
+	struct ffs_ep *ep;
+	struct ffs_data *ffs;
+	struct ffs_epfile *epfile;
+	unsigned short count;
 	unsigned long flags;
-
-	ffs_log("enter: state %d setup_state %d flag %lu", func->ffs->state,
-		func->ffs->setup_state, func->ffs->flags);
 
 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
 	count = func->ffs->eps_count;
 	epfile = func->ffs->epfiles;
+	ffs = func->ffs;
 	ep = func->eps;
+
+	ffs_log("enter: state %d setup_state %d flag %lu", func->ffs->state,
+		func->ffs->setup_state, func->ffs->flags);
+
 	while (count--) {
 		/* pending requests get nuked */
 		if (likely(ep->ep))
@@ -2104,14 +2108,15 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 	unsigned long flags;
 	int ret = 0;
 
-	ffs_log("enter: state %d setup_state %d flag %lu", func->ffs->state,
-		func->ffs->setup_state, func->ffs->flags);
-
 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
 	ffs = func->ffs;
 	ep = func->eps;
 	epfile = ffs->epfiles;
 	count = ffs->eps_count;
+
+	ffs_log("enter: state %d setup_state %d flag %lu", func->ffs->state,
+		func->ffs->setup_state, func->ffs->flags);
+
 	while(count--) {
 		ep->ep->driver_data = ep;
 
@@ -3213,8 +3218,8 @@ static inline struct f_fs_opts *ffs_do_functionfs_bind(struct usb_function *f,
 	struct ffs_function *func = ffs_func_from_usb(f);
 	struct f_fs_opts *ffs_opts =
 		container_of(f->fi, struct f_fs_opts, func_inst);
-	struct ffs_data *ffs;
-
+	struct ffs_data *ffs = ffs_opts->dev->ffs_data;
+	struct ffs_data *ffs_data;
 	int ret;
 
 	ENTER();
@@ -3229,13 +3234,13 @@ static inline struct f_fs_opts *ffs_do_functionfs_bind(struct usb_function *f,
 	if (!ffs_opts->no_configfs)
 		ffs_dev_lock();
 	ret = ffs_opts->dev->desc_ready ? 0 : -ENODEV;
-	ffs = ffs_opts->dev->ffs_data;
+	ffs_data = ffs_opts->dev->ffs_data;
 	if (!ffs_opts->no_configfs)
 		ffs_dev_unlock();
 	if (ret)
 		return ERR_PTR(ret);
 
-	func->ffs = ffs;
+	func->ffs = ffs_data;
 	func->conf = c;
 	func->gadget = c->cdev->gadget;
 
@@ -3967,6 +3972,7 @@ static int ffs_acquire_dev(const char *dev_name, struct ffs_data *ffs_data)
 	}
 
 	ffs_dev_unlock();
+
 	return ret;
 }
 
