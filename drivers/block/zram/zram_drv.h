@@ -74,7 +74,7 @@ struct zram_table_entry {
 	};
 	unsigned long flags;
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
-	ktime_t ac_time;
+	unsigned long long ac_time;
 #endif
 };
 
@@ -90,17 +90,17 @@ struct zram_stats {
 	atomic64_t pages_stored;	/* no. of pages currently stored */
 	atomic_long_t max_used_pages;	/* no. of maximum pages stored */
 	atomic64_t writestall;		/* no. of write slow paths */
-	atomic64_t dup_data_size;	/*
-					 * compressed size of pages
-					 * duplicated
-					 */
-	atomic64_t meta_data_size;	/* size of zram_entries */
 	atomic64_t miss_free;		/* no. of missed free */
 #ifdef	CONFIG_ZRAM_WRITEBACK
 	atomic64_t bd_count;		/* no. of pages in backing device */
 	atomic64_t bd_reads;		/* no. of reads from backing device */
 	atomic64_t bd_writes;		/* no. of writes from backing device */
 #endif
+	atomic64_t dup_data_size;	/*
+					 * compressed size of pages
+					 * duplicated
+					 */
+	atomic64_t meta_data_size;	/* size of zram_entries */
 };
 
 struct zram_hash {
@@ -134,9 +134,8 @@ struct zram {
 	 */
 	bool claim; /* Protected by bdev->bd_mutex */
 	bool use_dedup;
-
+	struct file *backing_dev;
 #ifdef CONFIG_ZRAM_WRITEBACK
-        struct file *backing_dev;
 	struct block_device *bdev;
 	unsigned long *bitmap;
 	unsigned long nr_pages;
@@ -145,10 +144,6 @@ struct zram {
 	struct dentry *debugfs_dir;
 #endif
 };
-
-#ifdef CONFIG_HSWAP
-extern int zram0_free_size(void);
-#endif
 
 static inline bool zram_dedup_enabled(struct zram *zram)
 {
@@ -160,4 +155,8 @@ static inline bool zram_dedup_enabled(struct zram *zram)
 }
 
 void zram_entry_free(struct zram *zram, struct zram_entry *entry);
+
+#ifdef CONFIG_HSWAP
+extern int zram0_free_size(void);
+#endif
 #endif
