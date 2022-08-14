@@ -395,6 +395,7 @@ static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu)
 	struct sugov_cpu *loadcpu = &per_cpu(sugov_cpu, cpu);
 	unsigned long util_cfs = cpu_util_cfs(rq);
 	unsigned long util_dl  = cpu_util_dl(rq);
+	unsigned long util_ext;
 	struct sugov_cpu *sg_cpu;
 
 	*max = arch_scale_cpu_capacity(cpu);
@@ -404,12 +405,11 @@ static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu)
 	 * util_cfs + util_dl as requested freq. However, cpufreq is not yet
 	 * ready for such an interface. So, we only do the latter for now.
 	 */
-	*util = min(util_cfs + util_dl, *max);
+	util_ext = min(util_cfs + util_dl, *max);
 
-	*util = boosted_cpu_util(cpu, &loadcpu->walt_load);
+	*util = min(util_ext, cpu_util_freq_walt(cpu, &loadcpu->walt_load));
 	
-	*util = schedutil_cpu_util(sg_cpu->cpu, util_cfs, *max,
-				  FREQUENCY_UTIL, NULL);
+	*util = uclamp_util_with(rq, *util, NULL);
 }
 static void sugov_set_iowait_boost(struct sugov_cpu *sg_cpu, u64 time,
 				   unsigned int flags)
