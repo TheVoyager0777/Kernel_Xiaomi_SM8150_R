@@ -322,15 +322,15 @@ io_error:
 }
 
 static int brd_rw_page(struct block_device *bdev, sector_t sector,
-		       struct page *page, bool is_write)
+		       struct page *page, unsigned int op)
 {
 	struct brd_device *brd = bdev->bd_disk->private_data;
 	int err;
 
 	if (PageTransHuge(page))
 		return -ENOTSUPP;
-	err = brd_do_bvec(brd, page, PAGE_SIZE, 0, is_write, sector);
-	page_endio(page, is_write, err);
+	err = brd_do_bvec(brd, page, PAGE_SIZE, 0, op, sector);
+	page_endio(page, op_is_write(op), err);
 	return err;
 }
 
