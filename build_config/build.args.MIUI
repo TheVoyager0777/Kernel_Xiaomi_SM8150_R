@@ -1,0 +1,33 @@
+#
+# This is the cross complie invocation, these variables will be export in build-kernel.sh
+#
+
+# Set clang path
+CLANG_PATH=/home/voyager/gclang/clang-r458507
+
+ARGS="ARCH=arm64 \
+O=${OUT_DIR} \
+LLVM=1 \
+CLANG_TRIPLE=aarch64-linux-gnu- \
+CROSS_COMPILE=aarch64-linux-gnu- \
+CROSS_COMPILE_COMPAT=arm-linux-gnueabi- \
+-j${KEBABS}"
+
+#
+# If you need overwrite some config but don't want to change defconfig, then use the function below to 
+# overwrite the .config and complie with it.
+#
+#
+# Usage: -e [config]: 				Enable the specified config
+# 	 -d [config]: 				Disable the specified config
+#	 -set-str [config] [value]: 		Overwrite the value of selected config
+
+function overwrite_config() {
+	scripts/config --file ${OUT_DIR}/.config \
+		--set-str STATIC_USERMODEHELPER_PATH /system/bin/micd
+}
+
+# Use it to change the path or name of your extra script
+PACTH_NAME=
+
+PATCH_OUT_PRODUCT_HOOK=0
