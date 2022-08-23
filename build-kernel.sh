@@ -188,7 +188,7 @@ function start_build() {
 		make -j${KEBABS} ${ARGS} CC="ccache clang" HOSTCC="ccache gcc" HOSTCXX="ccache g++" 2>&1 | tee build.log
 	fi
 
-	ZIPNAME="Voyager-${DEVICE^^}-build${BUILD}-${OS}-${CSUM}-${DATE}.zip"
+	ZIPNAME="MiuiCX-${DEVICE^^}-build${BUILD}-${OS}-${CSUM}-${DATE}.zip"
 	export ZIPNAME	
 
 	echo "------ Filename: ${ZIPNAME} ------"
