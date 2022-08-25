@@ -1262,8 +1262,7 @@ struct usbpd *smb_get_usbpd(void);
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
 int smblib_get_prop_wireless_fw_version(struct smb_charger *chg,
-					union power_supply_propval *val)
-
+					union power_supply_propval *val);
 int smblib_set_prop_battery_charging_enabled(struct smb_charger *chg,
 					     const union power_supply_propval *val);
 int smblib_get_prop_battery_charging_enabled(struct smb_charger *chg,
