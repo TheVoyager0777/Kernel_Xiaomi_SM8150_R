@@ -135,6 +135,9 @@ struct cpuset {
 
 	/* for custom sched domain */
 	int relax_domain_level;
+	
+	/* group mode */
+	u64 types;
 };
 
 static inline struct cpuset *css_cs(struct cgroup_subsys_state *css)
@@ -151,6 +154,19 @@ static inline struct cpuset *task_cs(struct task_struct *task)
 static inline struct cpuset *parent_cs(struct cpuset *cs)
 {
 	return css_cs(cs->css.parent);
+}
+
+int task_type(struct task_struct *task)
+{
+	struct cpuset *cs;
+
+	if (unlikely(!cpusets_enabled()))
+		return 0;
+
+	rcu_read_lock();
+	cs = task_cs(task);
+	rcu_read_unlock();
+	return cs->types;
 }
 
 #ifdef CONFIG_NUMA
@@ -1631,6 +1647,7 @@ typedef enum {
 	FILE_MEMORY_PRESSURE,
 	FILE_SPREAD_PAGE,
 	FILE_SPREAD_SLAB,
+	FILE_TYPE,
 } cpuset_filetype_t;
 
 static int cpuset_write_u64(struct cgroup_subsys_state *css, struct cftype *cft,
@@ -1670,6 +1687,9 @@ static int cpuset_write_u64(struct cgroup_subsys_state *css, struct cftype *cft,
 		break;
 	case FILE_SPREAD_SLAB:
 		retval = update_flag(CS_SPREAD_SLAB, cs, val);
+		break;
+	case FILE_TYPE:
+		cs->types = val;
 		break;
 	default:
 		retval = -EINVAL;
@@ -1830,6 +1850,8 @@ static u64 cpuset_read_u64(struct cgroup_subsys_state *css, struct cftype *cft)
 		return is_spread_page(cs);
 	case FILE_SPREAD_SLAB:
 		return is_spread_slab(cs);
+	case FILE_TYPE:
+		return cs->types;
 	default:
 		BUG();
 	}
@@ -1991,6 +2013,7 @@ cpuset_css_alloc(struct cgroup_subsys_state *parent_css)
 	nodes_clear(cs->effective_mems);
 	fmeter_init(&cs->fmeter);
 	cs->relax_domain_level = -1;
+	cs->types = 8;
 
 	return &cs->css;
 
