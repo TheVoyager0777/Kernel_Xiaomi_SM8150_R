@@ -419,8 +419,6 @@ static inline int task_is_fg(struct task_struct *task)
 	return 0;
 }
 
-#ifndef CONFIG_ONEPLUS_FG_OPT
-extern bool is_fg(int uid);
 static inline int current_is_fg(void)
 {
 	int cur_uid;
@@ -430,11 +428,5 @@ static inline int current_is_fg(void)
 		return 1;
 	return 0;
 }
-#else
-static inline int current_is_fg(void)
-{
-	return 0;
-}
-#endif /*CONFIG_ONEPLUS_FG_OPT*/
 
 #endif /* _LINUX_CRED_H */

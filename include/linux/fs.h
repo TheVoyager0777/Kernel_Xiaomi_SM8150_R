@@ -1986,17 +1986,22 @@ static inline enum rw_hint file_write_hint(struct file *file)
 
 static inline int iocb_flags(struct file *file);
 
+static inline u16 ki_hint_validate(enum rw_hint hint)
+{
+	typeof(((struct kiocb *)0)->ki_hint) max_hint = -1;
+
+	if (hint <= max_hint)
+		return hint;
+	return 0;
+}
+
 static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
 {
 	*kiocb = (struct kiocb) {
 		.ki_filp = filp,
 		.ki_flags = iocb_flags(filp),
-<<<<<<< HEAD
-		.ki_hint = file_write_hint(filp),
-=======
 		.ki_hint = ki_hint_validate(file_write_hint(filp)),
 		.ki_ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_NONE, 0),
->>>>>>> 42d26a8c5f68c (fs: Add aio iopriority support)
 	};
 }
 
