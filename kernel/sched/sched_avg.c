@@ -113,8 +113,11 @@ void sched_get_nr_running_avg(struct sched_avg_stats *stats)
 			break;
 		}
 	}
+
+#ifdef CONFIG_SCHED_WALT
 	if (any_hyst_time && get_rtgb_active_time() >= MAX_RTGB_TIME)
 		sched_update_hyst_times();
+#endif
 
 	last_get_time = curr_time;
 
