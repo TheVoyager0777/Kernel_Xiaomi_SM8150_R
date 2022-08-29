@@ -776,12 +776,14 @@ static bool adjustment_possible(const struct cluster_data *cluster,
 						cluster->nr_isolated_cpus));
 }
 
+#ifdef CONFIG_SCHED_WALT
 static bool need_all_cpus(const struct cluster_data *cluster)
 {
 
 	return (is_min_capacity_cpu(cluster->first_cpu) &&
 		sched_ravg_window < DEFAULT_SCHED_RAVG_WINDOW);
 }
+#endif
 
 static bool eval_need(struct cluster_data *cluster)
 {
@@ -798,7 +800,11 @@ static bool eval_need(struct cluster_data *cluster)
 
 	spin_lock_irqsave(&state_lock, flags);
 
+#ifdef CONFIG_SCHED_WALT
 	if (cluster->boost || !cluster->enable || need_all_cpus(cluster)) {
+#else
+	if (cluster->boost || !cluster->enable) {
+#endif
 		need_cpus = cluster->max_cpus;
 	} else {
 		cluster->active_cpus = get_active_cpu_count(cluster);
@@ -942,7 +948,9 @@ static void core_ctl_call_notifier(void)
 		return;
 
 	ndata.nr_big = last_nr_big;
+#ifdef CONFIG_SCHED_WALT
 	walt_fill_ta_data(&ndata);
+#endif
 	trace_core_ctl_notif_data(ndata.nr_big, ndata.coloc_load_pct,
 			ndata.ta_util_pct, ndata.cur_cap_pct);
 
@@ -1346,7 +1354,12 @@ static int cluster_init(const struct cpumask *mask)
 
 static int __init core_ctl_init(void)
 {
+#ifdef CONFIG_SCHED_WALT
 	struct sched_cluster *cluster;
+#else
+	struct cluster_data *cluster;
+	unsigned int index = 0;
+#endif
 	int ret;
 
 	cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN,
@@ -1357,8 +1370,12 @@ static int __init core_ctl_init(void)
 			"core_ctl/isolation:dead",
 			NULL, core_ctl_isolation_dead_cpu);
 
+#ifdef CONFIG_SCHED_WALT
 	for_each_sched_cluster(cluster) {
-		ret = cluster_init(&cluster->cpus);
+#else
+	for_each_cluster(cluster, index) {
+#endif
+		ret = cluster_init(&cluster->cpu_mask);
 		if (ret)
 			pr_warn("unable to create core ctl group: %d\n", ret);
 	}

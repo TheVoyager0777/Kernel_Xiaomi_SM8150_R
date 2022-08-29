@@ -7358,6 +7358,9 @@ struct find_best_target_env {
 
 static inline bool prefer_spread_on_idle(int cpu)
 {
+#ifndef CONFIG_SCHED_WALT
+	return false;
+#else
 	if (likely(!sysctl_sched_prefer_spread))
 		return false;
 
@@ -7365,6 +7368,7 @@ static inline bool prefer_spread_on_idle(int cpu)
 		return sysctl_sched_prefer_spread >= 1;
 
 	return sysctl_sched_prefer_spread > 1;
+#endif
 }
 
 static inline void adjust_cpus_for_packing(struct task_struct *p,
@@ -7415,15 +7419,21 @@ static int get_start_cpu(struct task_struct *p)
 	int start_cpu = rd->min_cap_orig_cpu;
 	bool boosted = schedtune_task_boost(p) > 0 ||
 			task_boost_policy(p) == SCHED_BOOST_ON_BIG;
+#ifdef CONFIG_SCHED_WALT
 	bool task_skip_min = (sched_boost() != CONSERVATIVE_BOOST)
 				&& get_rtg_status(p) && p->unfilter;
+#endif
 
 	/*
 	 * note about min/mid/max_cap_orig_cpu - either all of them will be -ve
 	 * or just mid will be -1, there never be any other combinations of -1s
 	 * beyond these
 	 */
+#ifdef CONFIG_SCHED_WALT
 	if (task_skip_min || boosted) {
+#else
+	if (boosted) {
+#endif
 		start_cpu = rd->mid_cap_orig_cpu == -1 ?
 			rd->max_cap_orig_cpu : rd->mid_cap_orig_cpu;
 	}
@@ -7802,7 +7812,9 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 		if (!prefer_idle && !boosted &&
 			(target_cpu != -1 || best_idle_cpu != -1) &&
 			(fbt_env->placement_boost == SCHED_BOOST_NONE ||
+#ifdef CONFIG_SCHED_WALT
 			sched_boost() != FULL_THROTTLE_BOOST ||
+#endif
 			(fbt_env->placement_boost == SCHED_BOOST_ON_BIG &&
 				!next_group_higher_cap)))
 			break;
@@ -9384,9 +9396,11 @@ redo:
 
 		continue;
 next:
+#ifdef CONFIG_SCHED_WALT
 		trace_sched_load_balance_skip_tasks(env->src_cpu, env->dst_cpu,
 				env->src_grp_type, p->pid, load, task_util(p),
 				cpumask_bits(&p->cpus_allowed)[0], env->flags );
+#endif
 		list_move_tail(&p->se.group_node, tasks);
 	}
 
@@ -10995,9 +11009,11 @@ static int load_balance(int this_cpu, struct rq *this_rq,
 	};
 
 	env.prefer_spread = (prefer_spread_on_idle(this_cpu) &&
-				!((sd->flags & SD_ASYM_CPUCAPACITY) &&
-				 !cpumask_test_cpu(this_cpu,
-						 &asym_cap_sibling_cpus)));
+				!((sd->flags & SD_ASYM_CPUCAPACITY) 
+#ifdef CONFIG_SCHED_WALT
+				&& !cpumask_test_cpu(this_cpu, &asym_cap_sibling_cpus)
+#endif
+				));
 
 	cpumask_and(cpus, sched_domain_span(sd), cpu_active_mask);
 
@@ -11204,7 +11220,9 @@ no_move:
 				busiest->active_balance = 1;
 				busiest->push_cpu = this_cpu;
 				active_balance = 1;
+#ifdef CONFIG_SCHED_WALT
 				mark_reserved(this_cpu);
+#endif
 			}
 			raw_spin_unlock_irqrestore(&busiest->lock, flags);
 
@@ -11342,8 +11360,10 @@ static bool silver_has_big_tasks(void)
 	for_each_possible_cpu(cpu) {
 		if (!is_min_capacity_cpu(cpu))
 			break;
+#ifdef CONFIG_SCHED_WALT
 		if (cpu_rq(cpu)->walt_stats.nr_big_tasks)
 			return true;
+#endif
 	}
 
 	return false;
@@ -11419,8 +11439,11 @@ static int idle_balance(struct rq *this_rq, struct rq_flags *rf)
 		}
 
 		if (prefer_spread && !force_lb &&
-			(sd->flags & SD_ASYM_CPUCAPACITY) &&
-			!(cpumask_test_cpu(this_cpu, &asym_cap_sibling_cpus)))
+			(sd->flags & SD_ASYM_CPUCAPACITY)
+#ifdef CONFIG_SCHED_WALT
+			&& !(cpumask_test_cpu(this_cpu, &asym_cap_sibling_cpus))
+#endif
+			)
 			avg_idle = this_rq->avg_idle;
 
 		if (avg_idle < curr_cost + sd->max_newidle_lb_cost) {
