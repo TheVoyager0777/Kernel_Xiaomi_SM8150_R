@@ -1372,10 +1372,11 @@ static int __init core_ctl_init(void)
 
 #ifdef CONFIG_SCHED_WALT
 	for_each_sched_cluster(cluster) {
+		ret = cluster_init(&cluster->cpus);
 #else
 	for_each_cluster(cluster, index) {
-#endif
 		ret = cluster_init(&cluster->cpu_mask);
+#endif
 		if (ret)
 			pr_warn("unable to create core ctl group: %d\n", ret);
 	}

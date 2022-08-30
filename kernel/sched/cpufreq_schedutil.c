@@ -300,14 +300,23 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
-	unsigned long cfs_max;
+	struct sugov_cpu *loadcpu = &per_cpu(sugov_cpu, cpu);
+	unsigned long util_cfs = cpu_util_cfs(cpu);
+	unsigned long util_dl  = cpu_util_dl(rq);
+	unsigned long util_ext;
 
-	cfs_max = arch_scale_cpu_capacity(NULL, cpu);
+	*max = arch_scale_cpu_capacity(NULL, cpu);
 
-	*util = min(rq->cfs.avg.util_avg, cfs_max);
-	*max = cfs_max;
-	*util = effective_cpu_util(cpu, cpu_util_cfs(cpu),
-					  FREQUENCY_UTIL, NULL);
+	/*
+	 * Ideally we would like to set util_dl as min/guaranteed freq and
+	 * util_cfs + util_dl as requested freq. However, cpufreq is not yet
+	 * ready for such an interface. So, we only do the latter for now.
+	 */
+	util_ext = min(util_cfs + util_dl, *max);
+
+	*util = min(util_ext, cpu_util_freq_walt(cpu, &loadcpu->walt_load));
+	
+	*util = uclamp_rq_util_with(rq, *util, NULL);
 }
 
 static void sugov_set_iowait_boost(struct sugov_cpu *sg_cpu, u64 time,
@@ -471,7 +480,7 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 		sg_cpu->util = util;
 		sg_cpu->max = max;
 		sg_cpu->flags = flags;
-#ifdef CONFIG_SCHED_wALT
+#ifdef CONFIG_SCHED_WALT
 		sugov_calc_avg_cap(sg_policy, sg_cpu->walt_load.ws,
 				   sg_policy->policy->cur);
 		trace_sugov_util_update(sg_cpu->cpu, sg_cpu->util,
@@ -480,7 +489,7 @@ static void sugov_update_single(struct update_util_data *hook, u64 time,
 				sg_cpu->walt_load.rtgb_active, flags);
 #endif
 		sugov_iowait_boost(sg_cpu, &util, &max);
-#ifdef CONFIG_SCHED_wALT
+#ifdef CONFIG_SCHED_WALT
 		sugov_walt_adjust(sg_cpu, &util, &max);
 #endif
 		next_f = get_next_freq(sg_policy, util, max);
@@ -544,7 +553,7 @@ static unsigned int sugov_next_freq_shared(struct sugov_cpu *sg_cpu, u64 time)
 		}
 
 		sugov_iowait_boost(j_sg_cpu, &util, &max);
-#ifdef CONFIG_SCHED_wALT
+#ifdef CONFIG_SCHED_WALT
 		sugov_walt_adjust(j_sg_cpu, &util, &max);
 #endif
 	}
@@ -587,7 +596,7 @@ static void sugov_update_shared(struct update_util_data *hook, u64 time,
 	sugov_set_iowait_boost(sg_cpu, time, flags);
 	sg_cpu->last_update = time;
 
-#ifdef CONFIG_SCHED_wALT
+#ifdef CONFIG_SCHED_WALT
 	sugov_calc_avg_cap(sg_policy, sg_cpu->walt_load.ws,
 			   sg_policy->policy->cur);
 
