@@ -76,7 +76,7 @@ function disable_lto() {
 }
 
 function checkbuild() {
-	if [[ ! -f ${OUT_DIR}/arch/arm64/boot/Image ]] && [[ ! -f ${OUT_DIR}/arch/arm64/boot/Image.gz ]]; then
+	if [[ ! -f ${OUT_DIR}/arch/arm64/boot/Image-dtb ]] && [[ ! -f ${OUT_DIR}/arch/arm64/boot/Image.gz-dtb ]]; then
 		echo "Error in ${os} build!!"
         	git checkout arch/arm64/boot/dts/vendor &>/dev/null
 		exit 1
@@ -88,14 +88,13 @@ function out_product() {
 
 	mkdir -p anykernel/kernels/$OS
 	# Import Anykernel3 folder
-	if [[ -f ${OUT_DIR}/arch/arm64/boot/Image.gz ]]; then
-		cp ${OUT_DIR}/arch/arm64/boot/Image.gz anykernel/kernels/$OS
+	if [[ -f ${OUT_DIR}/arch/arm64/boot/Image.gz-dtb ]]; then
+		cp ${OUT_DIR}/arch/arm64/boot/Image.gz-dtb anykernel/kernels/$OS
 	else
-		if [[ -f ${OUT_DIR}/arch/arm64/boot/Image ]]; then
-			cp ${OUT_DIR}/arch/arm64/boot/Image anykernel/kernels/$OS
+		if [[ -f ${OUT_DIR}/arch/arm64/boot/Image-dtb ]]; then
+			cp ${OUT_DIR}/arch/arm64/boot/Image-dtb anykernel/kernels/$OS
 		fi
 	fi
-	cp ${OUT_DIR}/arch/arm64/boot/dtb anykernel/kernels/$OS
 	cp ${OUT_DIR}/arch/arm64/boot/dtbo.img anykernel/kernels/$OS
 
 	# If we use a patch script..
