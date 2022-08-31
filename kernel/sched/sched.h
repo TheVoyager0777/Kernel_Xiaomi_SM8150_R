@@ -2354,11 +2354,12 @@ unsigned long scale_irq_capacity(unsigned long util, unsigned long irq, unsigned
 static inline unsigned long
 cpu_util_freq(int cpu, struct sched_walt_cpu_load *walt_load)
 {
+#ifndef CONFIG_SCHED_WALT
 	struct rq *rq;
-#ifdef CONFIG_SCHED_WALT
-	return cpu_util_freq_walt(cpu, walt_load);
-#else
+
 	return min(cpu_util(cpu) + cpu_util_rt(rq), capacity_orig_of(cpu));
+#else
+	return cpu_util_freq_walt(cpu, walt_load);
 #endif
 }
 
