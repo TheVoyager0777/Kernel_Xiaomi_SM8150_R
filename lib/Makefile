@@ -268,3 +268,21 @@ CFLAGS_ubsan.o := $(call cc-option, -fno-stack-protector) $(DISABLE_STACKLEAK_PL
 obj-$(CONFIG_SBITMAP) += sbitmap.o
 
 obj-$(CONFIG_PARMAN) += parman.o
+
+obj-y += libc_sec/securec_v2/src/vsprintf_s.o \
+			      libc_sec/securec_v2/src/snprintf_s.o \
+			      libc_sec/securec_v2/src/memmove_s.o \
+			      libc_sec/securec_v2/src/strcat_s.o \
+			      libc_sec/securec_v2/src/strncpy_s.o \
+			      libc_sec/securec_v2/src/sprintf_s.o \
+			      libc_sec/securec_v2/src/memset_s.o \
+			      libc_sec/securec_v2/src/securecutil.o \
+			      libc_sec/securec_v2/src/strtok_s.o \
+			      libc_sec/securec_v2/src/memcpy_s.o \
+			      libc_sec/securec_v2/src/strncat_s.o \
+			      libc_sec/securec_v2/src/vsnprintf_s.o \
+			      libc_sec/securec_v2/src/strcpy_s.o \
+			      libc_sec/securec_v2/src/secureprintoutput_a.o \
+			      libc_sec/securec_v2/src/sscanf_s.o \
+			      libc_sec/securec_v2/src/vsscanf_s.o \
+			      libc_sec/securec_v2/src/secureinput_a.o

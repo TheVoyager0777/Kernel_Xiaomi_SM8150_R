@@ -70,6 +70,9 @@
 #include <linux/userfaultfd_k.h>
 #include <linux/dax.h>
 #include <linux/oom.h>
+#ifdef CONFIG_HW_CGROUP_WORKINGSET
+#include <linux/workingset_cgroup.h>
+#endif
 
 #include <asm/io.h>
 #include <asm/mmu_context.h>
@@ -3985,7 +3988,12 @@ static int do_read_fault(struct vm_fault *vmf)
 	 * if page by the offset is not ready to be mapped (cold cache or
 	 * something).
 	 */
+#ifdef CONFIG_HW_CGROUP_WORKINGSET
+	if (vma->vm_ops->map_pages && fault_around_bytes >> PAGE_SHIFT > 1
+	&& likely(!(current->ext_flags & PF_EXT_WSCG_MONITOR))) {
+#else
 	if (vma->vm_ops->map_pages && fault_around_bytes >> PAGE_SHIFT > 1) {
+#endif
 		ret = do_fault_around(vmf);
 		if (ret)
 			return ret;
@@ -4366,7 +4374,9 @@ static int handle_pte_fault(struct vm_fault *vmf)
 
 	if (!pte_present(vmf->orig_pte))
 		return do_swap_page(vmf);
-
+#ifdef CONFIG_HW_CGROUP_WORKINGSET
+	workingset_pagecache_on_ptefault(vmf);
+#endif
 	if (pte_protnone(vmf->orig_pte) && vma_is_accessible(vmf->vma))
 		return do_numa_page(vmf);
 
