@@ -43,7 +43,9 @@ static enum ws_self_read_state g_selfread_state = E_SELFREAD_NONE;
 
 static const char * const g_selfread_dir[] = {
 	"/data/data/",
+	"/data/user/",
 	"/data/user_de/",
+	"/storage/emulated/",
 	NULL
 };
 
@@ -162,8 +164,11 @@ static bool workingset_adjust_page_lru(struct page *page)
 		if (PageLRU(page)) {
 			struct lruvec *lruvec = NULL;
 			struct zone *zone = page_zone(page);
-
-#if KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE || defined(CONFIG_DAMON)
+            spin_lock_irq(&zone->zone_pgdat->lru_lock);
+			lruvec = mem_cgroup_page_lruvec(page,
+			    zone->zone_pgdat);
+#elif KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE
 			spin_lock_irq(zone_lru_lock(zone));
 			lruvec = mem_cgroup_page_lruvec(page,
 			    zone->zone_pgdat);
@@ -189,7 +194,9 @@ static bool workingset_adjust_page_lru(struct page *page)
 				adjusted = true;
 			}
 #endif
-#if KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE
+#if KERNEL_VERSION(5, 4, 0) <= LINUX_VERSION_CODE || defined(CONFIG_DAMON)
+			spin_unlock_irq(&zone->zone_pgdat->lru_lock);
+#elif KERNEL_VERSION(4, 9, 0) <= LINUX_VERSION_CODE
 			spin_unlock_irq(zone_lru_lock(zone));
 #else
 			spin_unlock_irq(&zone->lru_lock);
@@ -389,7 +396,8 @@ static void workingset_prereader_open_all_files_rcrdlocked(
 
 			if (!IS_ERR_OR_NULL(filpp[idx]))
 				continue;
-
+			ws_dbg("%s: open %s failed, ret=%d\n",
+			    __func__, data->file_array[idx].path, filpp[idx]);
 			if (record->state & E_RECORD_STATE_EXTERNAL_FILEPATH)
 				kfree(data->file_array[idx].path);
 

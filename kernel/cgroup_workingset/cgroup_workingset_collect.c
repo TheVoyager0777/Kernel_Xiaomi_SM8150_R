@@ -810,7 +810,7 @@ done:
 static unsigned int workingset_collector_dequeue_buffer_locked(
 	struct s_ws_collector *collector, char *buffer, size_t buf_size)
 {
-	unsigned int buffer_pos;
+	unsigned int buffer_pos = 0;
 	unsigned int read_pos;
 	unsigned int write_pos;
 	unsigned int copy_size;

@@ -545,5 +545,6 @@ enum binder_driver_command_protocol {
 	 */
 };
 
+int workingset_wakeup_preread_binder(int pid);
 #endif /* _UAPI_LINUX_BINDER_H */
 

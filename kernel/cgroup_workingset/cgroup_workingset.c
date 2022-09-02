@@ -33,6 +33,13 @@
 #include <linux/sched/task.h>
 #include <linux/slab.h>
 #include <linux/version.h>
+#ifdef CONFIG_ANDROID_BINDER_IPC
+#include <uapi/linux/android/binder.h>
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)) || defined(CONFIG_DAMON)
+#include <linux/pagewalk.h>
+#endif
 
 static bool g_module_initialized;
 static struct s_ws_collector *g_collector;
@@ -352,7 +359,13 @@ static int workingset_clear_pte_young_of_process(int pid)
 	struct task_struct *task = NULL;
 	struct mm_struct *mm = NULL;
 	struct vm_area_struct *vma = NULL;
-	struct mm_walk clear_young_walk = {};
+	struct mm_walk clear_young_walk = {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)) || defined(CONFIG_DAMON)
+	.ops = &(struct mm_walk_ops){.pmd_entry = clear_pte_young_range},
+#else
+	.pmd_entry = clear_pte_young_range,
+#endif
+};
 	struct s_clear_param cp;
 
 	if (pid <= 0)
@@ -371,8 +384,6 @@ static int workingset_clear_pte_young_of_process(int pid)
 	if (!mm)
 		goto out;
 	clear_young_walk.mm = mm;
-	clear_young_walk.pmd_entry = clear_pte_young_range;
-
 	down_read(&mm->mmap_sem);
 	cp.nr_cleared = 0;
 	clear_young_walk.private = &cp;
@@ -384,8 +395,13 @@ static int workingset_clear_pte_young_of_process(int pid)
 			continue;
 
 		cp.vma = vma;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0)) || defined(CONFIG_DAMON)
+		walk_page_range(
+			mm, vma->vm_start, vma->vm_end, clear_young_walk.ops, clear_young_walk.private);
+#else
 		walk_page_range(
 			vma->vm_start, vma->vm_end, &clear_young_walk);
+#endif
 	}
 	/*
 	 * Entries with the Access flag set to 0 are never held in the TLB,
@@ -584,6 +600,10 @@ static void workingset_mark_target_process(int pid, bool clear)
 			task->ext_flags |= PF_EXT_WSCG_PREREAD;
 	} while_each_thread(leader, task);
 	rcu_read_unlock();
+#ifdef CONFIG_ANDROID_BINDER_IPC
+	if (!clear)
+		workingset_wakeup_preread_binder(pid);
+#endif
 }
 
 static void workingset_permit_selfread(int pid)
@@ -696,7 +716,8 @@ static ssize_t workingset_state_write(
 	if (nr_write)
 		return nr_write;
 
-	if (target_state == E_CGROUP_STATE_MONITOR_INWORKING) {
+	if (target_state == E_CGROUP_STATE_MONITOR_INWORKING ||
+	    target_state == E_CGROUP_STATE_MONITOR_PREREAD) {
 		nr_write = workingset_collector_start_handler(ws, target_state);
 		if (nr_write)
 			return nr_write;

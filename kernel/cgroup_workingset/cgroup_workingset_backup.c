@@ -32,11 +32,17 @@ static struct crypto_shash *g_tfm;
 
 void workingset_record_list_init(void)
 {
-	if (totalram_pages > TOTAL_RAM_PAGES_3G)
+	unsigned long total_ram_pages ;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5,4,0))
+	total_ram_pages = totalram_pages();
+#else
+	total_ram_pages = totalram_pages;
+#endif
+	if (total_ram_pages > TOTAL_RAM_PAGES_3G)
 		g_max_records_count = MAX_RECORD_COUNT_ON_4G;
-	else if (totalram_pages > TOTAL_RAM_PAGES_2G)
+	else if (total_ram_pages > TOTAL_RAM_PAGES_2G)
 		g_max_records_count = MAX_RECORD_COUNT_ON_3G;
-	else if (totalram_pages > TOTAL_RAM_PAGES_1G)
+	else if (total_ram_pages > TOTAL_RAM_PAGES_1G)
 		g_max_records_count = MAX_RECORD_COUNT_ON_2G;
 	else
 		g_max_records_count = MAX_RECORD_COUNT_ON_1G;
@@ -86,7 +92,9 @@ unsigned int workingset_crc32c(
 	int err;
 
 	shash->tfm = g_tfm;
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(4,1,9))
 	shash->flags = 0;
+#endif
 	*ctx = crc;
 
 	err = crypto_shash_update(shash, address, length);

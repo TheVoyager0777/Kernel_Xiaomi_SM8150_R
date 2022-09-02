@@ -1015,35 +1015,6 @@ static void binder_wakeup_poll_threads_ilocked(struct binder_proc *proc,
 	}
 }
 
-#ifdef CONFIG_HW_CGROUP_WORKINGSET
-static bool workingset_preread_ilocked(
-	struct binder_proc *proc,
-	struct binder_thread *thread)
-{
-	if (binder_has_work_ilocked(thread, true))
-		return true;
-	if (list_empty(&proc->waiting_threads))
-		return false;
-
-	binder_inner_proc_unlock(proc);
-	__set_current_state(TASK_RUNNING);
-	workingset_preread_by_self();
-	binder_inner_proc_lock(proc);
-
-	return false;
-}
-
-static inline bool workingset_try_preread_ilocked(
-	struct binder_proc *proc,
-	struct binder_thread *thread,
-	struct task_struct *tsk)
-{
-	if (likely(!tsk || !(tsk->ext_flags & PF_EXT_WSCG_PREREAD)))
-		return false;
-	return workingset_preread_ilocked(proc, thread);
-}
-#endif
-
 /**
  * binder_select_thread_ilocked() - selects a thread for doing proc work.
  * @proc:	process to select a thread from
@@ -1071,6 +1042,56 @@ binder_select_thread_ilocked(struct binder_proc *proc)
 
 	return thread;
 }
+
+#ifdef CONFIG_HW_CGROUP_WORKINGSET
+static bool workingset_preread_ilocked(
+	struct binder_proc *proc,
+	struct binder_thread *thread)
+{
+	if (binder_has_work_ilocked(thread, true))
+		return true;
+	if (list_empty(&proc->waiting_threads))
+		return false;
+
+	binder_inner_proc_unlock(proc);
+	__set_current_state(TASK_RUNNING);
+	workingset_preread_by_self();
+	binder_inner_proc_lock(proc);
+
+	return false;
+}
+
+static inline bool workingset_try_preread_ilocked(
+	struct binder_proc *proc,
+	struct binder_thread *thread,
+	struct task_struct *tsk)
+{
+	if (likely(!tsk || !(tsk->ext_flags & PF_EXT_WSCG_PREREAD)))
+		return false;
+	return workingset_preread_ilocked(proc, thread);
+}
+
+int workingset_wakeup_preread_binder(int pid)
+{
+	struct binder_proc *proc = NULL;
+	struct binder_thread *thread = NULL;
+
+	mutex_lock(&binder_procs_lock);
+	hlist_for_each_entry(proc, &binder_procs, proc_node) {
+		if (proc->pid != pid)
+			continue;
+		binder_inner_proc_lock(proc);
+		thread = binder_select_thread_ilocked(proc);
+		if (thread)
+			wake_up_interruptible(&thread->wait);
+		binder_inner_proc_unlock(proc);
+		break;
+	}
+	mutex_unlock(&binder_procs_lock);
+
+	return 0;
+}
+#endif
 
 /**
  * binder_wakeup_thread_ilocked() - wakes up a thread for doing proc work.
