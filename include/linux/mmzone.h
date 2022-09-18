@@ -672,6 +672,12 @@ typedef struct pglist_data {
 
 	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
 
+#ifdef CONFIG_HYPERHOLD_ZSWAPD
+	wait_queue_head_t zswapd_wait;
+	atomic_t zswapd_wait_flag;
+	struct task_struct *zswapd;
+#endif
+
 #ifdef CONFIG_COMPACTION
 	int kcompactd_max_order;
 	enum zone_type kcompactd_classzone_idx;
@@ -819,6 +825,13 @@ static inline struct pglist_data *lruvec_pgdat(struct lruvec *lruvec)
 	return container_of(lruvec, struct pglist_data, lruvec);
 #endif
 }
+
+#ifdef CONFIG_HYPERHOLD_FILE_LRU
+static inline int is_node_lruvec(struct lruvec *lruvec)
+{
+	return &lruvec_pgdat(lruvec)->lruvec == lruvec;
+}
+#endif
 
 extern unsigned long lruvec_lru_size(struct lruvec *lruvec, enum lru_list lru, int zone_idx);
 

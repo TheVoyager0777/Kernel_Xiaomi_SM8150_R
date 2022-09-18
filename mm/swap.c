@@ -265,10 +265,22 @@ static void update_page_reclaim_stat(struct lruvec *lruvec,
 				     int file, int rotated)
 {
 	struct zone_reclaim_stat *reclaim_stat = &lruvec->reclaim_stat;
+#ifdef CONFIG_HYPERHOLD_FILE_LRU
+	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
+	struct zone_reclaim_stat *node_reclaim_stat;
 
+	node_reclaim_stat = &pgdat->lruvec.reclaim_stat;
+	if (!file)
+		node_reclaim_stat->recent_scanned[0]++;
+#endif
 	reclaim_stat->recent_scanned[file]++;
-	if (rotated)
+	if (rotated) {
 		reclaim_stat->recent_rotated[file]++;
+#ifdef CONFIG_HYPERHOLD_FILE_LRU
+		if (!file)
+			node_reclaim_stat->recent_rotated[0]++;
+#endif
+	}
 }
 
 static void __activate_page(struct page *page, struct lruvec *lruvec,

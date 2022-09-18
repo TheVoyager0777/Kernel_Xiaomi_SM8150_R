@@ -860,4 +860,27 @@ config FORCE_ALLOC_FROM_DMA_ZONE
 
 	  If unsure, say "n".
 
+config HYPERHOLD
+        bool "Enable HyperHold"
+        default y
+        depends on MEMCG
+        help
+          HyperHold is a intelligent memory management solution.
+
+config HYPERHOLD_FILE_LRU
+	bool "Enable HyperHold FILE LRU"
+	default n
+	depends on HYPERHOLD
+	help
+	  File-LRU is a mechanism that recliam anonymous pages and filecache separately.
+
+config HYPERHOLD_ZSWAPD
+        bool "Enable zswapd thread to reclaim anon pages in background"
+        default n
+        depends on HYPERHOLD
+        help
+          zswapd is a kernel thread that reclaim anonymous pages in the
+          background. When the use of swap pages reaches the watermark
+          and the refault of anonymous pages is high, the content of
+          zram will exchanged to eswap by a certain percentage.
 source "mm/damon/Kconfig"

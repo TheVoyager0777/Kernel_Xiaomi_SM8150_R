@@ -100,6 +100,42 @@ TRACE_EVENT(mm_vmscan_wakeup_kswapd,
 		__entry->order)
 );
 
+#ifdef CONFIG_HYPERHOLD
+TRACE_EVENT(mm_zswapd_wake,
+
+	TP_PROTO(int nid),
+
+	TP_ARGS(nid),
+
+	TP_STRUCT__entry(
+		__field(	int,	nid	)
+	),
+
+	TP_fast_assign(
+		__entry->nid = nid;
+	),
+
+	TP_printk("nid=%d", __entry->nid)
+);
+
+TRACE_EVENT(mm_zswapd_sleep,
+
+	TP_PROTO(int nid),
+
+	TP_ARGS(nid),
+
+	TP_STRUCT__entry(
+		__field(	int,	nid	)
+	),
+
+	TP_fast_assign(
+		__entry->nid = nid;
+	),
+
+	TP_printk("nid=%d", __entry->nid)
+);
+#endif
+
 DECLARE_EVENT_CLASS(mm_vmscan_direct_reclaim_begin_template,
 
 	TP_PROTO(int order, int may_writepage, gfp_t gfp_flags, int classzone_idx),
@@ -333,6 +369,35 @@ TRACE_EVENT(mm_vmscan_writepage,
 		pfn_to_page(__entry->pfn),
 		__entry->pfn,
 		show_reclaim_flags(__entry->reclaim_flags))
+);
+
+TRACE_EVENT(mm_vmscan_lru_zswapd_shrink_active,
+
+	TP_PROTO(int nid, unsigned long nr_taken,
+		unsigned long nr_deactivated,
+		int priority),
+
+	TP_ARGS(nid, nr_taken, nr_deactivated, priority),
+
+	TP_STRUCT__entry(
+		__field(int, nid)
+		__field(unsigned long, nr_taken)
+		__field(unsigned long, nr_deactivated)
+		__field(int, priority)
+		),
+
+	TP_fast_assign(
+		__entry->nid = nid;
+		__entry->nr_taken = nr_taken;
+		__entry->nr_deactivated = nr_deactivated;
+		__entry->priority = priority;
+		),
+
+	TP_printk("nid=%d nr_taken=%ld nr_deactivated=%ld priority=%d",
+			__entry->nid,
+			__entry->nr_taken,
+			__entry->nr_deactivated,
+			__entry->priority)
 );
 
 TRACE_EVENT(mm_vmscan_lru_shrink_inactive,
