@@ -74,7 +74,7 @@ const_debug unsigned int sysctl_sched_nr_migrate = 32;
  * Percent of burst assigned to cfs_b->runtime on tg_set_cfs_bandwidth,
  * 0 by default.
  */
-unsigned int sysctl_sched_cfs_bw_burst_onset_percent;
+unsigned int sysctl_sched_cfs_bw_burst_onset_percent = 60;
 
 unsigned int sysctl_sched_cfs_bw_burst_enabled = 1;
 #endif
