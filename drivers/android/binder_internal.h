@@ -446,6 +446,8 @@ struct binder_proc {
 	struct rb_root refs_by_node;
 	struct list_head waiting_threads;
 	int pid;
+	struct mutex files_lock;
+	const struct cred *cred;
 	struct task_struct *tsk;
 	struct hlist_node deferred_work_node;
 	int deferred_work;
@@ -573,7 +575,6 @@ struct binder_transaction {
 	 * during thread teardown
 	 */
 	spinlock_t lock;
-	ANDROID_VENDOR_DATA(1);
 };
 
 /**
