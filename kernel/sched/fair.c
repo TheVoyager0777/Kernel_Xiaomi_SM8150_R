@@ -8273,11 +8273,20 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 	struct energy_env *eenv;
 	bool is_rtg, curr_is_rtg;
 	struct find_best_target_env fbt_env;
+	struct cpuidle_state *idle;
 	bool need_idle = wake_to_idle(p);
 	int placement_boost = task_boost_policy(p);
 	u64 start_t = 0;
 	int next_cpu = -1, backup_cpu = -1;
+#ifdef CONFIG_UCLAMP_TASK
+	int max_spare_cap_cpu_ls = prev_cpu, best_idle_cpu = -1;
+	unsigned long max_spare_cap_ls = 0, target_cap;
+	bool latency_sensitive = uclamp_latency_sensitive(p);
+	unsigned int min_exit_lat = UINT_MAX;
+	int boosted = (uclamp_boosted(p) > 0 || per_task_boost(p) > 0);
+#else
 	int boosted = (schedtune_task_boost(p) > 0 || per_task_boost(p) > 0);
+#endif
 	int start_cpu = get_start_cpu(p);
 
 	if (start_cpu < 0)
@@ -8285,6 +8294,7 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 
 	is_rtg = task_in_related_thread_group(p);
 	curr_is_rtg = task_in_related_thread_group(cpu_rq(cpu)->curr);
+	target_cap = boosted ? 0 : ULONG_MAX;
 
 	fbt_env.fastpath = 0;
 	fbt_env.need_idle = need_idle;
@@ -8294,6 +8304,9 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 
 	if (sync && (need_idle || (is_rtg && curr_is_rtg)))
 		sync = 0;
+
+	if (!task_util_est(p))
+		goto out;
 
 	if (sysctl_sched_sync_hint_enable && sync &&
 				bias_to_this_cpu(p, cpu, start_cpu)) {
@@ -8354,6 +8367,29 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 			if (spare * 1024 < sched_capacity_margin_up[cpu_iter] *
 							task_util_est(p))
 				continue;
+
+			if (!latency_sensitive)
+				continue;
+
+			if (idle_cpu(cpu)) {
+				cpu_cap = capacity_orig_of(cpu);
+				if (boosted && cpu_cap < target_cap)
+					continue;
+				if (!boosted && cpu_cap > target_cap)
+					continue;
+				idle = idle_get_state(cpu_rq(cpu));
+				if (idle && idle->exit_latency > min_exit_lat &&
+						cpu_cap == target_cap)
+					continue;
+
+				if (idle)
+					min_exit_lat = idle->exit_latency;
+				target_cap = cpu_cap;
+				best_idle_cpu = cpu;
+			} else if (spare > max_spare_cap_ls) {
+				max_spare_cap_ls = spare;
+				max_spare_cap_cpu_ls = cpu;
+			}
 
 			/* Add CPU candidate */
 			eenv->cpu[eas_cpu_idx++].cpu_id = cpu_iter;
@@ -8429,6 +8465,11 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 					eenv->cpu[eenv->next_idx].cpu_id;
 
 out:
+#ifdef CONFIG_UCLAMP_TASK
+	if (latency_sensitive)
+		return best_idle_cpu >= 0 ? best_idle_cpu : max_spare_cap_cpu_ls;
+#endif
+
 	if (target_cpu < 0)
 		target_cpu = prev_cpu;
 
