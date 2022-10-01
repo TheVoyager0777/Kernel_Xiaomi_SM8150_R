@@ -368,6 +368,14 @@ struct cfs_bandwidth {
 struct task_group {
 	struct cgroup_subsys_state css;
 
+	/*
+	 * Controls whether tasks of this cgroup should be colocated with each
+	 * other and tasks of other cgroups that have the same flag turned on.
+	 */
+	bool colocate;
+	/* Controls whether further updates are allowed to the colocate flag */
+	bool colocate_update_disabled;
+
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	/* schedulable entities of this group on each cpu */
 	struct sched_entity **se;
@@ -2910,10 +2918,9 @@ extern int preferred_cluster(struct sched_cluster *cluster,
 extern struct sched_cluster *rq_cluster(struct rq *rq);
 extern void reset_task_stats(struct task_struct *p);
 extern void clear_top_tasks_bitmap(unsigned long *bitmap);
-
+extern int sync_cgroup_colocation(struct task_struct *p, bool insert);
 #if defined(CONFIG_SCHED_TUNE)
 extern bool task_sched_boost(struct task_struct *p);
-extern int sync_cgroup_colocation(struct task_struct *p, bool insert);
 extern bool schedtune_task_colocated(struct task_struct *p);
 extern void update_cgroup_boost_settings(void);
 extern void restore_cgroup_boost_settings(void);

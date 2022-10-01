@@ -2661,6 +2661,32 @@ static void transfer_busy_time(struct rq *rq, struct related_thread_group *grp,
 unsigned int __read_mostly sysctl_sched_enable_thread_grouping;
 unsigned int __read_mostly sysctl_sched_coloc_downmigrate_ns;
 
+#ifdef CONFIG_UCLAMP_TASK_GROUP
+static inline bool uclamp_task_colocated(struct task_struct *p)
+{
+	struct cgroup_subsys_state *css;
+	struct task_group *tg;
+	bool colocate;
+
+	rcu_read_lock();
+	css = task_css(p, cpu_cgrp_id);
+	if (!css) {
+		rcu_read_unlock();
+		return false;
+	}
+	tg = container_of(css, struct task_group, css);
+	colocate = tg->colocate;
+	rcu_read_unlock();
+
+	return colocate;
+}
+#else
+static inline bool uclamp_task_colocated(struct task_struct *p)
+{
+	return false;
+}
+#endif /* CONFIG_UCLAMP_TASK_GROUP */
+
 struct related_thread_group *related_thread_groups[MAX_NUM_CGROUP_COLOC_ID];
 static LIST_HEAD(active_related_thread_groups);
 DEFINE_RWLOCK(related_thread_group_lock);
@@ -2937,7 +2963,11 @@ void add_new_task_to_grp(struct task_struct *new)
 	 * lock. Even if there is a race, it will be added
 	 * to the co-located cgroup via cgroup attach.
 	 */
+#ifdef CONFIG_UCLAMP_TASK_GROUP
+	if (!uclamp_task_colocated(new))
+#else
 	if (!schedtune_task_colocated(new))
+#endif
 		return;
 
 	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
@@ -2948,7 +2978,11 @@ void add_new_task_to_grp(struct task_struct *new)
 	 * group. or it might have taken out from the colocated schedtune
 	 * cgroup. check these conditions under lock.
 	 */
+#ifdef CONFIG_UCLAMP_TASK_GROUP
+	if (!uclamp_task_colocated(new) || new->grp) {
+#else
 	if (!schedtune_task_colocated(new) || new->grp) {
+#endif
 		write_unlock_irqrestore(&related_thread_group_lock, flags);
 		return;
 	}
@@ -3020,6 +3054,41 @@ unsigned int sched_get_group_id(struct task_struct *p)
 }
 
 #if defined(CONFIG_SCHED_TUNE)
+/*
+ * We create a default colocation group at boot. There is no need to
+ * synchronize tasks between cgroups at creation time because the
+ * correct cgroup hierarchy is not available at boot. Therefore cgroup
+ * colocation is turned off by default even though the colocation group
+ * itself has been allocated. Furthermore this colocation group cannot
+ * be destroyted once it has been created. All of this has been as part
+ * of runtime optimizations.
+ *
+ * The job of synchronizing tasks to the colocation group is done when
+ * the colocation flag in the cgroup is turned on.
+ */
+static int __init create_default_coloc_group(void)
+{
+	struct related_thread_group *grp = NULL;
+	unsigned long flags;
+
+	grp = lookup_related_thread_group(DEFAULT_CGROUP_COLOC_ID);
+	write_lock_irqsave(&related_thread_group_lock, flags);
+	list_add(&grp->list, &active_related_thread_groups);
+	write_unlock_irqrestore(&related_thread_group_lock, flags);
+
+	return 0;
+}
+late_initcall(create_default_coloc_group);
+
+int sync_cgroup_colocation(struct task_struct *p, bool insert)
+{
+	unsigned int grp_id = insert ? DEFAULT_CGROUP_COLOC_ID : 0;
+
+	return __sched_set_group_id(p, grp_id);
+}
+#endif
+
+#if defined(CONFIG_UCLAMP_TASK_GROUP)
 /*
  * We create a default colocation group at boot. There is no need to
  * synchronize tasks between cgroups at creation time because the

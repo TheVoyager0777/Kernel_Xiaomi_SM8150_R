@@ -1438,6 +1438,27 @@ static void dequeue_rt_entity(struct sched_rt_entity *rt_se, unsigned int flags)
 	enqueue_top_rt_rq(&rq->rt);
 }
 
+#ifdef CONFIG_SMP
+static inline bool should_honor_rt_sync(struct rq *rq, struct task_struct *p,
+					bool sync)
+{
+	/*
+	 * If the waker is CFS, then an RT sync wakeup would preempt the waker
+	 * and force it to run for a likely small time after the RT wakee is
+	 * done. So, only honor RT sync wakeups from RT wakers.
+	 */
+	return sync && task_has_rt_policy(rq->curr) &&
+		p->prio <= rq->rt.highest_prio.next &&
+		rq->rt.rt_nr_running <= 2;
+}
+#else
+static inline bool should_honor_rt_sync(struct rq *rq, struct task_struct *p,
+					bool sync)
+{
+	return 0;
+}
+#endif
+
 /*
  * Adding/removing a task to/from a priority array:
  */
@@ -1509,12 +1530,15 @@ static void yield_task_rt(struct rq *rq)
 static int find_lowest_rq(struct task_struct *task);
 
 static int
-select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags,
-		  int sibling_count_hint)
+select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int subling_count_hint)
 {
-	struct task_struct *curr, *tgt_task;
+	struct task_struct *curr;
 	struct rq *rq;
+	struct rq *this_cpu_rq;
+	bool test;
 	bool may_not_preempt;
+	bool sync = !!(flags & WF_SYNC);
+	int this_cpu;
 
 	/* For anything but wake ups, just return the task_cpu */
 	if (sd_flag != SD_BALANCE_WAKE && sd_flag != SD_BALANCE_FORK)
@@ -1524,14 +1548,11 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags,
 
 	rcu_read_lock();
 	curr = READ_ONCE(rq->curr); /* unlocked access */
+	this_cpu = smp_processor_id();
+	this_cpu_rq = cpu_rq(this_cpu);
 
 	/*
 	 * If the current task on @p's runqueue is a softirq task,
-	 * it may run without preemption for a time that is
-	 * ill-suited for a waiting RT task. Therefore, try to
-	 * wake this RT task on another runqueue.
-	 *
-	 * Also, if the current task on @p's runqueue is an RT task, then
 	 * it may run without preemption for a time that is
 	 * ill-suited for a waiting RT task. Therefore, try to
 	 * wake this RT task on another runqueue.
@@ -1556,37 +1577,48 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags,
 	 *
 	 * This test is optimistic, if we get it wrong the load-balancer
 	 * will have to sort it out.
+	 *
+	 * We take into account the capacity of the CPU to ensure it fits the
+	 * requirement of the task - which is only important on heterogeneous
+	 * systems like big.LITTLE.
 	 */
 	may_not_preempt = task_may_not_preempt(curr, cpu);
-	if (energy_aware() || may_not_preempt ||
-	    (unlikely(rt_task(curr)) &&
-	     (curr->nr_cpus_allowed < 2 ||
-	      curr->prio <= p->prio))) {
+	test = (curr && (may_not_preempt ||
+			 (unlikely(rt_task(curr)) &&
+			  (curr->nr_cpus_allowed < 2 || curr->prio <= p->prio))));
+
+	/*
+	 * Respect the sync flag as long as the task can run on this CPU.
+	 */
+	if (should_honor_rt_sync(this_cpu_rq, p, sync) &&
+	    cpumask_test_cpu(this_cpu, &p->cpus_allowed)) {
+		cpu = this_cpu;
+		goto out_unlock;
+	}
+
+	if (test || !rt_task_fits_capacity(p, cpu)) {
 		int target = find_lowest_rq(p);
 
-
 		/*
-		 * Check once for losing a race with the other core's irq
-		 * handler. This does not happen frequently, but it can avoid
-		 * delaying the execution of the RT task in those cases.
+		 * Bail out if we were forcing a migration to find a better
+		 * fitting CPU but our search failed.
 		 */
-		if (target != -1) {
-			tgt_task = READ_ONCE(cpu_rq(target)->curr);
-			if (task_may_not_preempt(tgt_task, target))
-				target = find_lowest_rq(p);
-		}
+		if (!test && target != -1 && !rt_task_fits_capacity(p, target))
+			goto out_unlock;
 
 		/*
 		 * If cpu is non-preemptible, prefer remote cpu
 		 * even if it's running a higher-prio task.
-		 * Otherwise: Don't bother moving it if the
-		 * destination CPU is not running a lower priority task.
+		 * Otherwise: Don't bother moving it if the destination CPU is
+		 * not running a lower priority task.
 		 */
 		if (target != -1 &&
-		   (may_not_preempt ||
-		    p->prio < cpu_rq(target)->rt.highest_prio.curr))
+		    (may_not_preempt ||
+		     p->prio < cpu_rq(target)->rt.highest_prio.curr))
 			cpu = target;
 	}
+
+out_unlock:
 	rcu_read_unlock();
 
 out:
