@@ -40,7 +40,6 @@
 #include "cpupri.h"
 #include "cpudeadline.h"
 #include "cpuacct.h"
-#include "android.h"
 
 #ifdef CONFIG_SCHED_DEBUG
 # define SCHED_WARN_ON(x)	WARN_ONCE(x, #x)
@@ -2552,11 +2551,6 @@ static inline void double_rq_unlock(struct rq *rq1, struct rq *rq2)
 extern void set_rq_online (struct rq *rq);
 extern void set_rq_offline(struct rq *rq);
 extern bool sched_smp_initialized;
-
-/*
- * task_may_not_preempt - check whether a task may not be preemptible soon
- */
-extern bool task_may_not_preempt(struct task_struct *task, int cpu);
 
 #else /* CONFIG_SMP */
 
