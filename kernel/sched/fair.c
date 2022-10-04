@@ -33,10 +33,12 @@
 #include <linux/mempolicy.h>
 #include <linux/migrate.h>
 #include <linux/task_work.h>
-
+#ifndef CONFIG_SCHED_TUNE
+#include <linux/reciprocal_div.h>
+#endif
 #include <trace/events/sched.h>
 
-#include "sched.h"
+#include "android.h"
 #include "tune.h"
 #include "walt.h"
 
@@ -6797,7 +6799,6 @@ static int wake_affine(struct sched_domain *sd, struct task_struct *p,
 	return affine;
 }
 
-#ifdef CONFIG_SCHED_TUNE
 struct reciprocal_value schedtune_spc_rdiv;
 
 static long
@@ -6826,21 +6827,14 @@ schedtune_margin(unsigned long signal, long boost)
 	return margin;
 }
 
-static inline int
-schedtune_cpu_margin(unsigned long util, int cpu)
-{
-	int boost = schedtune_cpu_boost(cpu);
-
-	if (boost == 0)
-		return 0;
-
-	return schedtune_margin(util, boost);
-}
-
 static inline long
 schedtune_task_margin(struct task_struct *task)
 {
+#ifdef CONFIG_UCLAMP_TASK
+	int boost = uclamp_boosted(task);
+#else
 	int boost = schedtune_task_boost(task);
+#endif
 	unsigned long util;
 	long margin;
 
@@ -6853,20 +6847,24 @@ schedtune_task_margin(struct task_struct *task)
 	return margin;
 }
 
-#else /* CONFIG_SCHED_TUNE */
+#ifdef CONFIG_SCHED_TUNE
 
+static inline int
+schedtune_cpu_margin(unsigned long util, int cpu)
+{
+	int boost = schedtune_cpu_boost(cpu);
+
+	if (boost == 0)
+		return 0;
+
+	return schedtune_margin(util, boost);
+}
+#else /* CONFIG_SCHED_TUNE */
 static inline int
 schedtune_cpu_margin(unsigned long util, int cpu)
 {
 	return 0;
 }
-
-static inline int
-schedtune_task_margin(struct task_struct *task)
-{
-	return 0;
-}
-
 #endif /* CONFIG_SCHED_TUNE */
 
 unsigned long
@@ -7473,7 +7471,11 @@ static inline bool task_fits_max(struct task_struct *p, int cpu)
 	if (is_min_capacity_cpu(cpu)) {
 		if (task_boost_policy(p) == SCHED_BOOST_ON_BIG ||
 			task_boost > 0 ||
+#ifdef CONFIG_UCLAMP_TASK
+			uclamp_boosted(p) > 0 ||
+#else
 			schedtune_task_boost(p) > 0 ||
+#endif
 			walt_should_kick_upmigrate(p, cpu))
 			return false;
 	} else { /* mid cap cpu */
@@ -7562,11 +7564,15 @@ static inline void adjust_cpus_for_packing(struct task_struct *p,
 		*best_idle_cpu = -1;
 }
 
-static int get_start_cpu(struct task_struct *p)
+static int get_start_cpu(struct task_struct *p, bool sync_boost)
 {
 	struct root_domain *rd = cpu_rq(smp_processor_id())->rd;
 	int start_cpu = rd->min_cap_orig_cpu;
+#ifdef CONFIG_UCLAMP_TASK
+	bool boosted = uclamp_boosted(p) > 0 ||
+#else
 	bool boosted = schedtune_task_boost(p) > 0 ||
+#endif
 			task_boost_policy(p) == SCHED_BOOST_ON_BIG;
 #ifdef CONFIG_SCHED_WALT
 	bool task_skip_min = (sched_boost() != CONSERVATIVE_BOOST)
@@ -7586,6 +7592,10 @@ static int get_start_cpu(struct task_struct *p)
 		start_cpu = rd->mid_cap_orig_cpu == -1 ?
 			rd->max_cap_orig_cpu : rd->mid_cap_orig_cpu;
 	}
+
+	if (sync_boost && rd->mid_cap_orig_cpu != -1)
+		return rd->mid_cap_orig_cpu;
+
 	if (start_cpu == -1 || start_cpu == rd->max_cap_orig_cpu)
 		return start_cpu;
 
@@ -8264,7 +8274,8 @@ static inline bool is_many_wakeup(int sibling_count_hint)
 static int find_energy_efficient_cpu(struct sched_domain *sd,
 				     struct task_struct *p,
 				     int cpu, int prev_cpu,
-				     int sync, int sibling_count_hint)
+				     int sync,  bool sync_boost, 
+				     int sibling_count_hint)
 {
 	int use_fbt = sched_feat(FIND_BEST_TARGET);
 	int cpu_iter, eas_cpu_idx = EAS_CPU_NXT;
@@ -8287,7 +8298,7 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 #else
 	int boosted = (schedtune_task_boost(p) > 0 || per_task_boost(p) > 0);
 #endif
-	int start_cpu = get_start_cpu(p);
+	int start_cpu = get_start_cpu(p, sync_boost);
 
 	if (start_cpu < 0)
 		return -1;
@@ -8558,11 +8569,16 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 	int want_affine = 0;
 	int want_energy = 0;
 	int sync = wake_flags & WF_SYNC;
+	int high_cap_cpu =
+	     cpu_rq(cpu)->rd->mid_cap_orig_cpu != -1 ?
+	     cpu_rq(cpu)->rd->mid_cap_orig_cpu :
+	     cpu_rq(cpu)->rd->max_cap_orig_cpu;
+	bool sync_boost = sync && cpu >= high_cap_cpu;
 
 	if (energy_aware()) {
 		rcu_read_lock();
 		new_cpu = find_energy_efficient_cpu(energy_sd, p,
-						cpu, prev_cpu, sync,
+						cpu, prev_cpu, sync, sync_boost,
 						sibling_count_hint);
 		rcu_read_unlock();
 
@@ -8642,7 +8658,7 @@ pick_cpu:
 	} else {
 		if (energy_sd)
 			new_cpu = find_energy_efficient_cpu(energy_sd, p, cpu,
-					prev_cpu, sync, sibling_count_hint);
+					prev_cpu, sync, sync_boost, sibling_count_hint);
 
 		/* if we did an energy-aware placement and had no choices available
 		 * then fall back to the default find_idlest_cpu choice
@@ -13342,7 +13358,7 @@ void check_for_migration(struct rq *rq, struct task_struct *p)
 
 		raw_spin_lock(&migration_lock);
 		rcu_read_lock();
-		new_cpu = find_energy_efficient_cpu(sd, p, cpu, prev_cpu, 0, 1);
+		new_cpu = find_energy_efficient_cpu(sd, p, cpu, prev_cpu, 0, false, 1);
 		rcu_read_unlock();
 		if ((new_cpu != -1) && (new_cpu != prev_cpu) &&
 		    (capacity_orig_of(new_cpu) > capacity_orig_of(prev_cpu))) {
