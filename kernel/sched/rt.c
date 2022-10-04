@@ -4,7 +4,7 @@
  * policies)
  */
 
-#include "sched.h"
+#include "android.h"
 
 #include <linux/interrupt.h>
 #include <linux/slab.h>

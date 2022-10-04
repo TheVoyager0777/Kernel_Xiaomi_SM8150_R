@@ -27,7 +27,7 @@
  *  of the License.
  */
 
-#include "sched.h"
+#include "android.h"
 
 #include <linux/gfp.h>
 #include <linux/sched.h>
