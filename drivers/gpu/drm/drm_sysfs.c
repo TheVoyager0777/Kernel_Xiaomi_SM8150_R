@@ -432,10 +432,6 @@ static ssize_t dynamic_fps_show(struct device *dev,
 	return dsi_display_dynamic_fps_read(connector, buf);
 }
 
-extern ssize_t smart_fps_value_show(struct device *device,
-			   struct device_attribute *attr,
-			   char *buf);
-
 static DEVICE_ATTR_RW(dim_layer_enable);
 static DEVICE_ATTR(dim_alpha, S_IRUGO|S_IWUSR, NULL, xm_fod_dim_layer_alpha_store);
 static DEVICE_ATTR_RW(status);
@@ -449,7 +445,6 @@ static DEVICE_ATTR_RO(dynamic_fps);
 static DEVICE_ATTR_RO(doze_brightness);
 static DEVICE_ATTR_RW(doze_backlight);
 static DEVICE_ATTR_RO(fod_ui_ready);
-static DEVICE_ATTR_RO(smart_fps_value);
 
 static struct attribute *connector_dev_attrs[] = {
 	&dev_attr_status.attr,
@@ -465,7 +460,6 @@ static struct attribute *connector_dev_attrs[] = {
 	&dev_attr_dynamic_fps.attr,
 	&dev_attr_mipi_reg.attr,
 	&dev_attr_dim_layer_enable.attr,
-	&dev_attr_smart_fps_value.attr,
 	NULL
 };
 
