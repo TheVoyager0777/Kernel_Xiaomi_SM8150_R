@@ -1317,7 +1317,6 @@ void qmi_rmnet_work_exit(void *port)
 	rmnet_ps_wq = NULL;
 	kfree(rmnet_work);
 	rmnet_work = NULL;
-	dfc_wakelock_release((struct qmi_info *)rmnet_get_qmi_pt(port));
 }
 EXPORT_SYMBOL(qmi_rmnet_work_exit);
 
