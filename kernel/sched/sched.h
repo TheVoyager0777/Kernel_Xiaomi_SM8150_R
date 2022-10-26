@@ -69,6 +69,7 @@ struct walt_sched_stats {
 	int nr_big_tasks;
 	u64 cumulative_runnable_avg_scaled;
 	u64 pred_demands_sum_scaled;
+	unsigned int nr_rtg_high_prio_tasks;
 };
 
 struct group_cpu_time {
@@ -795,6 +796,7 @@ extern void sched_put_rd(struct root_domain *rd);
 #ifdef HAVE_RT_PUSH_IPI
 extern void rto_push_irq_work_func(struct irq_work *work);
 #endif
+extern struct task_struct *pick_highest_pushable_task(struct rq *rq, int cpu);
 #endif /* CONFIG_SMP */
 
 #ifdef CONFIG_UCLAMP_TASK
@@ -867,6 +869,7 @@ struct rq {
 #ifdef CONFIG_SMP
 	unsigned long last_load_update_tick;
 	unsigned long last_blocked_load_update_tick;
+	call_single_data_t	nohz_csd;
 #endif /* CONFIG_SMP */
 	unsigned long nohz_flags;
 #endif /* CONFIG_NO_HZ_COMMON */
@@ -2622,6 +2625,8 @@ enum rq_nohz_flag_bits {
 	NOHZ_STATS_KICK
 };
 
+#define NOHZ_KICK_MASK	(NOHZ_BALANCE_KICK | NOHZ_STATS_KICK)
+
 #define nohz_flags(cpu)	(&cpu_rq(cpu)->nohz_flags)
 
 extern void nohz_balance_exit_idle(unsigned int cpu);
@@ -2871,6 +2876,12 @@ static inline unsigned int task_pl(struct task_struct *p)
 static inline bool task_in_related_thread_group(struct task_struct *p)
 {
 	return !!(rcu_access_pointer(p->grp) != NULL);
+}
+
+static inline bool task_rtg_high_prio(struct task_struct *p)
+{
+	return task_in_related_thread_group(p) &&
+		(p->prio <= sysctl_walt_rtg_cfs_boost_prio);
 }
 
 static inline

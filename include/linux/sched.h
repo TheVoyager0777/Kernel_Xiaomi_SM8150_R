@@ -862,6 +862,7 @@ struct task_struct {
 	struct list_head grp_list;
 	u64 cpu_cycles;
 	bool misfit;
+	bool rtg_high_prio;
 	u32 unfilter;
 #endif
 
