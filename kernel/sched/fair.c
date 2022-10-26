@@ -36,10 +36,10 @@
 #ifndef CONFIG_SCHED_TUNE
 #include <linux/reciprocal_div.h>
 #endif
-#include <trace/events/sched.h>
 
 #include "android.h"
 #include "tune.h"
+#include <trace/events/sched.h>
 #include "walt.h"
 
 #ifdef CONFIG_FUSE_SHORTCIRCUIT
@@ -204,6 +204,7 @@ unsigned int sysctl_sched_min_task_util_for_boost = 51;
 /* 0.68ms default for 20ms window size scaled to 1024 */
 unsigned int sysctl_sched_min_task_util_for_colocation = 35;
 __read_mostly unsigned int sysctl_sched_prefer_spread;
+unsigned int sysctl_walt_rtg_cfs_boost_prio = 99; /* disabled by default */
 #endif
 static unsigned int __maybe_unused sched_small_task_threshold = 102;
 
@@ -7651,7 +7652,8 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 	bool next_group_higher_cap = false;
 	int isolated_candidate = -1;
 	bool boosted = fbt_env->boosted;
-
+	unsigned int target_nr_rtg_high_prio = UINT_MAX;
+	bool rtg_high_prio_task = task_rtg_high_prio(p);
 	*backup_cpu = -1;
 
 	/*
@@ -7930,6 +7932,32 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			 */
 			if (p->state == TASK_RUNNING)
 				continue;
+
+			/*
+			 * Try to spread the rtg high prio tasks so that they
+			 * don't preempt each other. This is a optimisitc
+			 * check assuming rtg high prio can actually preempt
+			 * the current running task with the given vruntime
+			 * boost.
+			 */
+			if (rtg_high_prio_task)  {
+				if (walt_nr_rtg_high_prio(i) > target_nr_rtg_high_prio)
+					continue;
+
+				/* Favor CPUs with maximum spare capacity */
+				if (walt_nr_rtg_high_prio(i) == target_nr_rtg_high_prio &&
+						spare_cap < target_max_spare_cap)
+					continue;
+
+			} else {
+				/* Favor CPUs with maximum spare capacity */
+				if (spare_cap < target_max_spare_cap)
+					continue;
+			}
+
+			target_max_spare_cap = spare_cap;
+			target_nr_rtg_high_prio = walt_nr_rtg_high_prio(i);
+			target_cpu = i;
 
 			/*
 			 * Case C) Non latency sensitive tasks on ACTIVE CPUs.
@@ -11000,7 +11028,12 @@ static struct rq *find_busiest_queue(struct lb_env *env,
 {
 	struct rq *busiest = NULL, *rq;
 	unsigned long busiest_load = 0, busiest_capacity = 1;
-	int i;
+	int i, done = 0;
+
+	walt_find_busiest_queue(env->dst_cpu, group, env->cpus,
+					     &busiest, &done);
+	if (done)
+		return busiest;
 
 	for_each_cpu_and(i, sched_group_span(group), env->cpus) {
 		unsigned long capacity, wl;

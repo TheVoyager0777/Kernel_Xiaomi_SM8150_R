@@ -10,6 +10,7 @@
 #include <linux/binfmts.h>
 #include <linux/sched/idle.h>
 
+struct rq;
 /*
  * Tracepoint for calling kthread_stop, performed to end a kthread:
  */
@@ -1274,6 +1275,29 @@ TRACE_EVENT_CONDITION(sched_overutilized,
 		__entry->overutilized ? 1 : 0, __entry->cpulist)
 );
 
+TRACE_EVENT(walt_find_busiest_queue,
+
+	TP_PROTO(int dst_cpu, int busiest_cpu, unsigned long src_mask),
+
+	TP_ARGS(dst_cpu, busiest_cpu, src_mask),
+
+	TP_STRUCT__entry(
+		__field(int, dst_cpu)
+		__field(int, busiest_cpu)
+		__field(unsigned long, src_mask)
+	),
+
+	TP_fast_assign(
+		__entry->dst_cpu	= dst_cpu;
+		__entry->busiest_cpu	= busiest_cpu;
+		__entry->src_mask	= src_mask;
+	),
+
+	TP_printk("dst_cpu=%d busiest_cpu=%d src_mask=%lx\n",
+			__entry->dst_cpu, __entry->busiest_cpu,
+			__entry->src_mask)
+);
+
 /*
  * Tracepoint for find_best_target
  */
@@ -1470,11 +1494,19 @@ TRACE_EVENT(sched_task_util,
 	TP_PROTO(struct task_struct *p, int next_cpu, int backup_cpu,
 		int target_cpu, bool sync, int need_idle, int fastpath,
 		bool placement_boost, u64 start_t,
+#ifdef CONFIG_SCHED_TUNE
 		bool stune_boosted, bool is_rtg, bool rtg_skip_min,
+#else
+		bool uclamp_boosted, bool is_rtg, bool rtg_skip_min,
+#endif
 		int start_cpu),
 
 	TP_ARGS(p, next_cpu, backup_cpu, target_cpu, sync, need_idle, fastpath,
+#ifdef CONFIG_SCHED_TUNE
 		placement_boost, start_t, stune_boosted, is_rtg, rtg_skip_min,
+#else
+		placement_boost, start_t, uclamp_boosted, is_rtg, rtg_skip_min,
+#endif
 		start_cpu),
 
 	TP_STRUCT__entry(
@@ -1491,7 +1523,11 @@ TRACE_EVENT(sched_task_util,
 		__field(int, placement_boost		)
 		__field(int, rtg_cpu			)
 		__field(u64, latency			)
+#ifdef CONFIG_SCHED_TUNE
 		__field(bool, stune_boosted		)
+#else
+		__field(bool, uclamp_boosted		)
+#endif
 		__field(bool, is_rtg			)
 		__field(bool, rtg_skip_min		)
 		__field(int, start_cpu			)
@@ -1513,7 +1549,11 @@ TRACE_EVENT(sched_task_util,
 		__entry->fastpath		= fastpath;
 		__entry->placement_boost	= placement_boost;
 		__entry->latency		= (sched_clock() - start_t);
-		__entry->stune_boosted		= stune_boosted;
+#ifdef CONFIG_SCHED_TUNE
+		__entry->stune_boosted          = stune_boosted;
+#else
+		__entry->uclamp_boosted         = uclamp_boosted;
+#endif
 		__entry->is_rtg			= is_rtg;
 		__entry->rtg_skip_min		= rtg_skip_min;
 		__entry->start_cpu		= start_cpu;
@@ -1522,13 +1562,20 @@ TRACE_EVENT(sched_task_util,
 #endif
 	),
 
+#ifdef CONFIG_SCHED_TUNE
 	TP_printk("pid=%d comm=%s util=%lu prev_cpu=%d next_cpu=%d backup_cpu=%d target_cpu=%d sync=%d need_idle=%d fastpath=%d placement_boost=%d latency=%llu stune_boosted=%d is_rtg=%d rtg_skip_min=%d start_cpu=%d unfilter=%u",
+#else
+	TP_printk("pid=%d comm=%s util=%lu prev_cpu=%d next_cpu=%d backup_cpu=%d target_cpu=%d sync=%d need_idle=%d fastpath=%d placement_boost=%d latency=%llu stune_boosted=%d is_rtg=%d rtg_skip_min=%d start_cpu=%d unfilter=%u",
+#endif
 		__entry->pid, __entry->comm, __entry->util, __entry->prev_cpu,
 		__entry->next_cpu, __entry->backup_cpu, __entry->target_cpu,
 		__entry->sync, __entry->need_idle,
 		__entry->fastpath, __entry->placement_boost,
+#ifdef CONFIG_SCHED_TUNE
 		__entry->latency, __entry->stune_boosted,
-#ifdef CONFIG_SCHED_WALT
+#else
+		__entry->latency, __entry->uclamp_boosted,
+#endif
 		__entry->is_rtg, __entry->rtg_skip_min, __entry->start_cpu,
 		__entry->unfilter)
 #else
@@ -1602,6 +1649,102 @@ TRACE_EVENT(sched_isolate,
 		__entry->time, __entry->isolate)
 );
 
+TRACE_EVENT(walt_active_load_balance,
+
+	TP_PROTO(struct task_struct *p, int prev_cpu, int new_cpu),
+
+	TP_ARGS(p, prev_cpu, new_cpu),
+
+	TP_STRUCT__entry(
+		__field(pid_t, pid)
+		__field(bool, misfit)
+		__field(int, prev_cpu)
+		__field(int, new_cpu)
+	),
+
+	TP_fast_assign(
+		__entry->pid		= p->pid;
+		__entry->misfit		= p->misfit;
+		__entry->prev_cpu	= prev_cpu;
+		__entry->new_cpu	= new_cpu;
+	),
+
+	TP_printk("pid=%d misfit=%d prev_cpu=%d new_cpu=%d\n",
+			__entry->pid, __entry->misfit, __entry->prev_cpu,
+			__entry->new_cpu)
+);
+
+TRACE_EVENT(walt_newidle_balance,
+
+	TP_PROTO(int this_cpu, int busy_cpu, int pulled, bool help_min_cap, bool enough_idle),
+
+	TP_ARGS(this_cpu, busy_cpu, pulled, help_min_cap, enough_idle),
+
+	TP_STRUCT__entry(
+		__field(int, cpu)
+		__field(int, busy_cpu)
+		__field(int, pulled)
+		__field(unsigned int, nr_running)
+		__field(unsigned int, rt_nr_running)
+		__field(int, nr_iowait)
+		__field(bool, help_min_cap)
+		__field(u64, avg_idle)
+		__field(bool, enough_idle)
+		__field(int, overload)
+	),
+
+	TP_fast_assign(
+		__entry->cpu		= this_cpu;
+		__entry->busy_cpu	= busy_cpu;
+		__entry->pulled		= pulled;
+		__entry->nr_running	= cpu_rq(this_cpu)->nr_running;
+		__entry->rt_nr_running	= cpu_rq(this_cpu)->rt.rt_nr_running;
+		__entry->nr_iowait	= atomic_read(&(cpu_rq(this_cpu)->nr_iowait));
+		__entry->help_min_cap	= help_min_cap;
+		__entry->avg_idle	= cpu_rq(this_cpu)->avg_idle;
+		__entry->enough_idle	= enough_idle;
+		__entry->overload	= cpu_rq(this_cpu)->rd->overload;
+	),
+
+	TP_printk("cpu=%d busy_cpu=%d pulled=%d nr_running=%u rt_nr_running=%u nr_iowait=%d help_min_cap=%d avg_idle=%llu enough_idle=%d overload=%d",
+			__entry->cpu, __entry->busy_cpu, __entry->pulled,
+			__entry->nr_running, __entry->rt_nr_running,
+			__entry->nr_iowait, __entry->help_min_cap,
+			__entry->avg_idle, __entry->enough_idle,
+			__entry->overload)
+);
+
+TRACE_EVENT(walt_lb_cpu_util,
+
+	TP_PROTO(int cpu, struct rq *rq),
+
+	TP_ARGS(cpu, rq),
+
+	TP_STRUCT__entry(
+		__field(int, cpu)
+		__field(unsigned int, nr_running)
+		__field(unsigned int, cfs_nr_running)
+		__field(unsigned int, nr_big)
+		__field(unsigned int, nr_rtg_high_prio_tasks)
+		__field(unsigned int, cpu_util)
+		__field(unsigned int, capacity_orig)
+	),
+
+	TP_fast_assign(
+		__entry->cpu			= cpu;
+		__entry->nr_running		= cpu_rq(cpu)->nr_running;
+		__entry->cfs_nr_running		= cpu_rq(cpu)->cfs.h_nr_running;
+		__entry->nr_big			= rq->walt_stats.nr_big_tasks;
+		__entry->nr_rtg_high_prio_tasks	= walt_nr_rtg_high_prio(cpu);
+		__entry->cpu_util		= cpu_util(cpu);
+		__entry->capacity_orig		= capacity_orig_of(cpu);
+	),
+
+	TP_printk("cpu=%d nr_running=%u cfs_nr_running=%u nr_big=%u nr_rtg_hp=%u cpu_util=%u capacity_orig=%u",
+		__entry->cpu, __entry->nr_running, __entry->cfs_nr_running,
+		__entry->nr_big, __entry->nr_rtg_high_prio_tasks,
+		__entry->cpu_util, __entry->capacity_orig)
+);
 #include "walt.h"
 
 #endif /* CONFIG_SMP */

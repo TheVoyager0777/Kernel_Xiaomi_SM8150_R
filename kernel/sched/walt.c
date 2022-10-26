@@ -24,7 +24,6 @@
 #include <linux/list_sort.h>
 #include <linux/jiffies.h>
 #include <linux/sched/stat.h>
-#include <trace/events/sched.h>
 #include "sched.h"
 #include "walt.h"
 
@@ -221,12 +220,23 @@ __read_mostly unsigned int walt_scale_demand_divisor;
 void inc_rq_walt_stats(struct rq *rq, struct task_struct *p)
 {
 	inc_nr_big_task(&rq->walt_stats, p);
+
+	p->rtg_high_prio = task_rtg_high_prio(p);
+	if (p->rtg_high_prio)
+		rq->walt_stats.nr_rtg_high_prio_tasks++;
+
 	walt_inc_cumulative_runnable_avg(rq, p);
 }
 
 void dec_rq_walt_stats(struct rq *rq, struct task_struct *p)
 {
 	dec_nr_big_task(&rq->walt_stats, p);
+
+	if (p->rtg_high_prio)
+		rq->walt_stats.nr_rtg_high_prio_tasks--;
+
+	BUG_ON(rq->walt_stats.nr_big_tasks < 0);
+
 	walt_dec_cumulative_runnable_avg(rq, p);
 }
 
@@ -2255,7 +2265,7 @@ static void walt_cpus_capacity_changed(const cpumask_t *cpus)
 
 
 struct sched_cluster *sched_cluster[NR_CPUS];
-static int num_sched_clusters;
+int num_sched_clusters;
 
 struct list_head cluster_head;
 cpumask_t asym_cap_sibling_cpus = CPU_MASK_NONE;
@@ -3700,6 +3710,7 @@ void walt_sched_init_rq(struct rq *rq)
 	rq->old_estimated_time = 0;
 	rq->old_busy_time_group = 0;
 	rq->walt_stats.pred_demands_sum_scaled = 0;
+	rq->walt_stats.nr_rtg_high_prio_tasks = 0;
 	rq->ed_task = NULL;
 	rq->curr_table = 0;
 	rq->prev_top = 0;
@@ -3901,3 +3912,211 @@ unlock_mutex:
 	return ret;
 }
 #endif
+
+static inline unsigned long walt_lb_cpu_util(int cpu)
+{
+	struct rq *rq;
+
+	return rq->walt_stats.cumulative_runnable_avg_scaled;
+}
+
+static inline bool need_active_lb(struct task_struct *p, int dst_cpu,
+				  int src_cpu)
+{
+
+	if (cpu_rq(src_cpu)->active_balance)
+		return false;
+
+	if (capacity_orig_of(dst_cpu) <= capacity_orig_of(src_cpu))
+		return false;
+
+	if (!p->misfit)
+		return false;
+
+	return true;
+}
+
+#define SMALL_TASK_THRESHOLD	102
+static int walt_lb_find_busiest_similar_cap_cpu(int dst_cpu, const cpumask_t *src_mask,
+		int *has_misfit)
+{
+	int i;
+	int busiest_cpu = -1;
+	unsigned long util, busiest_util = 0;
+	struct rq *rq;
+
+	for_each_cpu(i, src_mask) {
+		rq = cpu_rq(i);
+		trace_walt_lb_cpu_util(i, rq);
+
+		if (cpu_rq(i)->nr_running < 2 || !cpu_rq(i)->cfs.h_nr_running)
+			continue;
+
+		util = walt_lb_cpu_util(i);
+		if (util < busiest_util)
+			continue;
+
+		busiest_util = util;
+		busiest_cpu = i;
+	}
+
+	return busiest_cpu;
+}
+
+static int walt_lb_find_busiest_from_higher_cap_cpu(int dst_cpu, const cpumask_t *src_mask,
+		int *has_misfit)
+{
+	int i;
+	int busiest_cpu = -1;
+	unsigned long util, busiest_util = 0;
+	unsigned long total_capacity = 0, total_util = 0, total_nr = 0;
+	int total_cpus = 0;
+	struct rq *rq;
+	for_each_cpu(i, src_mask) {
+
+		if (!cpu_active(i))
+			continue;
+
+		rq = cpu_rq(i);
+		trace_walt_lb_cpu_util(i, rq);
+
+		util = walt_lb_cpu_util(i);
+		total_cpus += 1;
+		total_util += util;
+		total_capacity += capacity_orig_of(i);
+		total_nr += cpu_rq(i)->cfs.h_nr_running;
+
+		if (cpu_rq(i)->cfs.h_nr_running < 2)
+			continue;
+
+		if (cpu_rq(i)->cfs.h_nr_running == 2 &&
+			task_util(cpu_rq(i)->curr) < SMALL_TASK_THRESHOLD)
+			continue;
+
+		if (util < busiest_util)
+			continue;
+
+		busiest_util = util;
+		busiest_cpu = i;
+	}
+
+	return busiest_cpu;
+}
+
+static int walt_lb_find_busiest_from_lower_cap_cpu(int dst_cpu, const cpumask_t *src_mask,
+		int *has_misfit)
+{
+	int i;
+	int busiest_cpu = -1;
+	unsigned long util, busiest_util = 0;
+	unsigned long total_capacity = 0, total_util = 0, total_nr = 0;
+	int total_cpus = 0;
+	int busy_nr_big_tasks = 0;
+	struct rq *rq;
+
+	/*
+	 * A higher capacity CPU is looking at a lower capacity
+	 * cluster. active balance and big tasks are in play.
+	 * other than that, it is very much same as above. we
+	 * really don't need this as a separate block. will
+	 * refactor this after final testing is done.
+	 */
+	for_each_cpu(i, src_mask) {
+		rq = cpu_rq(i);
+
+		if (!cpu_active(i))
+			continue;
+
+		trace_walt_lb_cpu_util(i, rq);
+
+		util = walt_lb_cpu_util(i);
+		total_cpus += 1;
+		total_util += util;
+		total_capacity += capacity_orig_of(i);
+		total_nr += cpu_rq(i)->cfs.h_nr_running;
+
+		/*
+		 * no point in selecting this CPU as busy, as
+		 * active balance is in progress.
+		 */
+		if (cpu_rq(i)->active_balance)
+			continue;
+
+		/* active migration is allowed only to idle cpu */
+		if (cpu_rq(i)->cfs.h_nr_running < 2 &&
+			(!rq->walt_stats.nr_big_tasks || !idle_cpu(dst_cpu)))
+			continue;
+
+		if (util < busiest_util)
+			continue;
+
+		busiest_util = util;
+		busiest_cpu = i;
+		busy_nr_big_tasks = rq->walt_stats.nr_big_tasks;
+	}
+
+	if (busy_nr_big_tasks && busiest_cpu != -1)
+		*has_misfit = true;
+
+	return busiest_cpu;
+}
+
+static int walt_lb_find_busiest_cpu(int dst_cpu, const cpumask_t *src_mask, int *has_misfit)
+{
+	int fsrc_cpu = cpumask_first(src_mask);
+	int busiest_cpu;
+
+	if (capacity_orig_of(dst_cpu) == capacity_orig_of(fsrc_cpu))
+		busiest_cpu = walt_lb_find_busiest_similar_cap_cpu(dst_cpu,
+								src_mask, has_misfit);
+	else if (capacity_orig_of(dst_cpu) > capacity_orig_of(fsrc_cpu))
+		busiest_cpu = walt_lb_find_busiest_from_lower_cap_cpu(dst_cpu,
+								      src_mask, has_misfit);
+	else
+		busiest_cpu = walt_lb_find_busiest_from_higher_cap_cpu(dst_cpu,
+								       src_mask, has_misfit);
+
+	return busiest_cpu;
+}
+
+void walt_find_busiest_queue(int dst_cpu,
+				    struct sched_group *group,
+				    struct cpumask *env_cpus,
+				    struct rq **busiest, int *done)
+{
+	int fsrc_cpu = group_first_cpu(group);
+	int busiest_cpu = -1;
+	struct cpumask src_mask;
+	int has_misfit;
+
+	*done = 1;
+	*busiest = NULL;
+
+	/*
+	 * same cluster means, there will only be 1
+	 * CPU in the busy group, so just select it.
+	 */
+	if (same_cluster(dst_cpu, fsrc_cpu)) {
+		busiest_cpu = fsrc_cpu;
+		goto done;
+	}
+
+	/*
+	 * We will allow inter cluster migrations
+	 * only if the source group is sufficiently
+	 * loaded. The upstream load balancer is a
+	 * bit more generous.
+	 *
+	 * re-using the same code that we use it
+	 * for newly idle load balance. The policies
+	 * remain same.
+	 */
+	cpumask_and(&src_mask, sched_group_span(group), env_cpus);
+	busiest_cpu = walt_lb_find_busiest_cpu(dst_cpu, &src_mask, &has_misfit);
+done:
+	if (busiest_cpu != -1)
+		*busiest = cpu_rq(busiest_cpu);
+
+	trace_walt_find_busiest_queue(dst_cpu, busiest_cpu, src_mask.bits[0]);
+}
+
