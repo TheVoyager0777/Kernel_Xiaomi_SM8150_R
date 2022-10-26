@@ -102,6 +102,7 @@
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
 
+#include "sched/sched.h"
 #include <trace/events/sched.h>
 
 #define CREATE_TRACE_POINTS

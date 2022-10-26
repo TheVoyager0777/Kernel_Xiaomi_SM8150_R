@@ -68,6 +68,13 @@ extern __read_mostly unsigned int sched_freq_aggregate;
 extern __read_mostly unsigned int sched_group_upmigrate;
 extern __read_mostly unsigned int sched_group_downmigrate;
 
+extern int num_sched_clusters;
+
+extern void walt_find_busiest_queue(int dst_cpu,
+				    struct sched_group *group,
+				    struct cpumask *env_cpus,
+				    struct rq **busiest, int *done);
+
 extern void update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 						u64 wallclock, u64 irqtime);
 
@@ -343,6 +350,11 @@ static inline bool walt_should_kick_upmigrate(struct task_struct *p, int cpu)
 		return is_min_capacity_cpu(cpu);
 
 	return false;
+}
+
+static inline unsigned int walt_nr_rtg_high_prio(int cpu)
+{
+	return cpu_rq(cpu)->walt_stats.nr_rtg_high_prio_tasks;
 }
 
 extern bool is_rtgb_active(void);
