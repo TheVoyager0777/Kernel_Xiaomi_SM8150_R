@@ -8431,7 +8431,7 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 		fbt_env.skip_cpu = is_many_wakeup(sibling_count_hint) ?
 				   cpu : -1;
 
-#ifdef CONFIG_SCHED_wALT
+#ifdef CONFIG_SCHED_WALT
 		/* Find a cpu with sufficient capacity */
 		target_cpu = find_best_target(p, &eenv->cpu[EAS_CPU_BKP].cpu_id,
 					      prefer_idle, &fbt_env);
