@@ -1576,8 +1576,9 @@ TRACE_EVENT(sched_task_util,
 #else
 		__entry->latency, __entry->uclamp_boosted,
 #endif
+#ifdef CONFIG_SCHED_WALT
 		__entry->is_rtg, __entry->rtg_skip_min, __entry->start_cpu,
-		__entry->unfilter)
+				__entry->unfilter)
 #else
 		__entry->is_rtg, __entry->rtg_skip_min, __entry->start_cpu)
 #endif
