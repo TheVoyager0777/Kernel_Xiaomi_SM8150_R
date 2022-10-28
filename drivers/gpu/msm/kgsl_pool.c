@@ -106,7 +106,7 @@ _kgsl_pool_get_page(struct kgsl_page_pool *pool)
 		atomic_dec(&pool->page_count);
 		p = container_of((struct list_head *)node, typeof(*p), lru);
 		mod_node_page_state(page_pgdat(p),
-				NR_INDIRECTLY_RECLAIMABLE_BYTES,
+				NR_KERNEL_MISC_RECLAIMABLE,
 				-(PAGE_SIZE << pool->pool_order));
 	}
 
