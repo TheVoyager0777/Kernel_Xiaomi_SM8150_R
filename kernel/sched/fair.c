@@ -5346,6 +5346,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	util_est_enqueue(&rq->cfs, p);
 
+#ifdef CONFIG_sCHED_TUNE
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
 	 * the cfs_rq utilization to select a frequency.
@@ -5363,6 +5364,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 * also for throttled RQs.
 	 */
 	schedtune_enqueue_task(p, cpu_of(rq));
+#endif
 
 	/*
 	 * If in_iowait is set, the code below may not trigger any cpufreq
@@ -5427,6 +5429,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	struct sched_entity *se = &p->se;
 	int task_sleep = flags & DEQUEUE_SLEEP;
 
+#ifdef CONFIG_SCHED_TUNE
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
 	 * the cfs_rq utilization to select a frequency.
@@ -5434,6 +5437,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 * current task is not more accounted for in the selection of the OPP.
 	 */
 	schedtune_dequeue_task(p, cpu_of(rq));
+#endif
 
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
@@ -7384,7 +7388,11 @@ static inline int select_idle_sibling_cstate_aware(struct task_struct *p, int pr
 					continue;
 
 				/* figure out if the task can fit here at all */
+#ifdef CONFIG_SCHED_TUNE
 				new_usage = boosted_task_util(p);
+#else
+				new_usage = uclamp_task_util(p);
+#endif
 				capacity_orig = capacity_orig_of(i);
 
 				if (new_usage > capacity_orig)
@@ -7632,7 +7640,11 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 				   bool prefer_idle,
 				   struct find_best_target_env *fbt_env)
 {
+#ifdef CONFIG_SCHED_TUNE
 	unsigned long min_util = boosted_task_util(p);
+#else
+	unsigned long min_util = uclamp_task_util(p);
+#endif
 	unsigned long target_capacity = ULONG_MAX;
 	unsigned long min_wake_util = ULONG_MAX;
 	unsigned long target_max_spare_cap = 0;
@@ -8242,8 +8254,11 @@ static inline struct energy_env *get_eenv(struct task_struct *p, int prev_cpu)
 	 * util for group utilization calculations
 	 */
 	eenv->util_delta = task_util_est(p);
+#ifdef CONFIG_SCHED_TUNE
 	eenv->util_delta_boosted = boosted_task_util(p);
-
+#else
+	eenv->util_delta_boosted = uclamp_task_util(p);
+#endif
 	cpumask_and(&cpumask_possible_cpus, &p->cpus_allowed, cpu_online_mask);
 	eenv->max_cpu_count = cpumask_weight(&cpumask_possible_cpus);
 
@@ -8448,7 +8463,11 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 		 * all if(prefer_idle) blocks.
 		 */
 		prefer_idle = sched_feat(EAS_PREFER_IDLE) ?
+#ifdef CONFIG_SCHED_TUNE
 				(schedtune_prefer_idle(p) > 0) : 0;
+#else
+				(uclamp_latency_sensitive(p) > 0) : 0;
+#endif
 
 		eenv->max_cpu_count = EAS_CPU_BKP + 1;
 
@@ -8569,7 +8588,11 @@ static inline int wake_energy(struct task_struct *p, int prev_cpu,
 		 * Force prefer-idle tasks into the slow path, this may not happen
 		 * if none of the sd flags matched.
 		 */
+#ifdef CONFIG_SCHED_TUNE
 		if (schedtune_prefer_idle(p) > 0 && !sync)
+#else
+		if (uclamp_latency_sensitive(p) > 0 && !sync)
+#endif
 			return false;
 	}
 	return true;
