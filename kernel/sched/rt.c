@@ -1529,6 +1529,8 @@ static void yield_task_rt(struct rq *rq)
 #ifdef CONFIG_SMP
 static int find_lowest_rq(struct task_struct *task);
 
+static int rt_energy_aware_wake_cpu(struct task_struct *task);
+
 static int
 select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int subling_count_hint)
 {
@@ -1539,6 +1541,18 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int su
 	bool may_not_preempt;
 	bool sync = !!(flags & WF_SYNC);
 	int this_cpu;
+	int target = -1;
+
+	/*
+	 * If cpu is non-preemptible, prefer remote cpu
+	 * even if it's running a higher-prio task.
+	 * Otherwise: Don't bother moving it if the destination CPU is
+	 * not running a lower priority task.
+	 */
+	target = rt_energy_aware_wake_cpu(p);
+	if (target != -1 &&
+	    (may_not_preempt || p->prio < cpu_rq(target)->rt.highest_prio.curr))
+		goto out;
 
 	/* For anything but wake ups, just return the task_cpu */
 	if (sd_flag != SD_BALANCE_WAKE && sd_flag != SD_BALANCE_FORK)
@@ -1840,6 +1854,7 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 #else
 	bool boost_on_big = NULL;
 #endif
+	bool best_cpu_lt = true;
 
 	rcu_read_lock();
 
@@ -1856,6 +1871,7 @@ retry:
 	do {
 		int fcpu = group_first_cpu(sg);
 		int capacity_orig = capacity_orig_of(fcpu);
+		int lt;
 
 		if (boost_on_big) {
 			if (is_min_capacity_cpu(fcpu))
@@ -1873,6 +1889,26 @@ retry:
 				continue;
 
 			util = cpu_util(cpu);
+
+			lt = walt_nr_rtg_high_prio(cpu);
+
+			/*
+			 * When the best is suitable and the current is not,
+			 * skip it
+			 */
+			if (lt && !best_cpu_lt)
+				continue;
+
+			/*
+			 * Either both are sutilable or unsuitable, load takes
+			 * precedence.
+			 */
+			if (!(best_cpu_lt ^ lt) && (util > best_cpu_util))
+				continue;
+
+			/* Find the least loaded CPU */
+			if (util > best_cpu_util)
+				continue;
 
 			if (__cpu_overutilized(cpu, tutil))
 				continue;
@@ -1913,6 +1949,7 @@ retry:
 			best_cpu_util = util;
 			best_cpu = cpu;
 			best_capacity = capacity_orig;
+			best_cpu_lt = lt;
 		}
 
 	} while (sg = sg->next, sg != sd->groups);
