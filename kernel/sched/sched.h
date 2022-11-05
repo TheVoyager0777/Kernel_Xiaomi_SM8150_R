@@ -62,6 +62,10 @@ struct sched_walt_cpu_load {
 	u64 ws;
 };
 
+#ifdef CONFIG_HW_RT_ACTIVE_LB
+extern void check_for_rt_migration(struct rq *rq, struct task_struct *p);
+#endif
+
 #ifdef CONFIG_SCHED_WALT
 extern unsigned int sched_ravg_window;
 
@@ -1035,6 +1039,11 @@ struct rq {
 	/* Must be inspected within a rcu lock section */
 	struct cpuidle_state *idle_state;
 	int idle_state_idx;
+#endif
+#ifdef CONFIG_HW_RT_ACTIVE_LB
+	int			rt_active_balance;
+	struct			task_struct *rt_push_task;
+	struct			cpu_stop_work rt_active_balance_work;
 #endif
 };
 

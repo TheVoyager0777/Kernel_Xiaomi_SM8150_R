@@ -69,6 +69,7 @@ extern __read_mostly unsigned int sched_group_upmigrate;
 extern __read_mostly unsigned int sched_group_downmigrate;
 
 extern int num_sched_clusters;
+extern unsigned long uclamp_task_util(struct task_struct *p);
 
 extern void walt_find_busiest_queue(int dst_cpu,
 				    struct sched_group *group,
