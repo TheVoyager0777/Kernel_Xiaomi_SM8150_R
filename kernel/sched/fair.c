@@ -3769,14 +3769,14 @@ static inline unsigned long task_util_est(struct task_struct *p)
 }
 
 #ifdef CONFIG_UCLAMP_TASK
-static inline unsigned long uclamp_task_util(struct task_struct *p)
+inline unsigned long uclamp_task_util(struct task_struct *p)
 {
 	return clamp(task_util_est(p),
 		     uclamp_eff_value(p, UCLAMP_MIN),
 		     uclamp_eff_value(p, UCLAMP_MAX));
 }
 #else
-static inline unsigned long uclamp_task_util(struct task_struct *p)
+inline unsigned long uclamp_task_util(struct task_struct *p)
 {
 	return task_util_est(p);
 }
