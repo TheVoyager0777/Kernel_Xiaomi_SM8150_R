@@ -2036,6 +2036,25 @@ static inline int hrtick_enabled(struct rq *rq)
 #endif /* CONFIG_SCHED_HRTICK */
 
 #ifdef CONFIG_SCHED_WALT
+static inline int per_task_boost(struct task_struct *p)
+{
+	if (p->boost_period) {
+		if (sched_clock() > p->boost_expires) {
+			p->boost_period = 0;
+			p->boost_expires = 0;
+			p->boost = 0;
+		}
+	}
+	return p->boost;
+}
+#else
+static inline int per_task_boost(struct task_struct *p)
+{
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_SCHED_WALT
 u64 sched_ktime_clock(void);
 unsigned long
 cpu_util_freq_walt(int cpu, struct sched_walt_cpu_load *walt_load);
