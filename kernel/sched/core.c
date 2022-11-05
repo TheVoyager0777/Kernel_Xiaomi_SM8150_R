@@ -4087,6 +4087,11 @@ void scheduler_tick(void)
 
 	if (curr->sched_class == &fair_sched_class)
 		check_for_migration(rq, curr);
+
+#ifdef CONFIG_HW_RT_ACTIVE_LB
+	if (curr->sched_class == &rt_sched_class)
+		check_for_rt_migration(rq, curr);
+#endif
 }
 
 #ifdef CONFIG_NO_HZ_FULL
