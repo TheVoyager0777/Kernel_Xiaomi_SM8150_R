@@ -9431,7 +9431,7 @@ static inline int migrate_degrades_locality(struct task_struct *p,
 #endif
 
 static inline bool can_migrate_boosted_task(struct task_struct *p,
-			int src_cpu, int dst_cpu)
+			int src_cpu, int dst_cpu, bool force)
 {
 	struct rq *rq = task_rq(p);
 
@@ -11541,7 +11541,7 @@ no_move:
 			 * if the curr task on busiest cpu can't be
 			 * moved to this_cpu
 			 */
-			if (!cpumask_test_cpu(this_cpu, &busiest->curr->cpus_allowed)) ||
+			if ((!cpumask_test_cpu(this_cpu, &busiest->curr->cpus_allowed)) ||
 				!can_migrate_boosted_task(busiest->curr,
 						cpu_of(busiest), this_cpu, false)) {
 				raw_spin_unlock_irqrestore(&busiest->lock,
