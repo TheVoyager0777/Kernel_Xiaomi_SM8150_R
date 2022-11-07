@@ -1531,12 +1531,15 @@ static void yield_task_rt(struct rq *rq)
 #ifdef CONFIG_SMP
 static int find_lowest_rq(struct task_struct *task);
 
-static int rt_energy_aware_wake_cpu(struct task_struct *task);
+static DEFINE_PER_CPU(cpumask_var_t, local_cpu_mask);
+
+static int rt_energy_aware_wake_cpu(struct task_struct *task, int ret);
 
 static int
 select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int subling_count_hint)
 {
 	struct task_struct *curr;
+	struct cpumask *lowest_mask = this_cpu_cpumask_var_ptr(local_cpu_mask);
 	struct rq *rq;
 	struct rq *this_cpu_rq;
 	bool test;
@@ -1544,6 +1547,16 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int su
 	bool sync = !!(flags & WF_SYNC);
 	int this_cpu;
 	int target = -1;
+	int ret;
+
+	may_not_preempt = task_may_not_preempt(curr, cpu);
+
+	/*
+	 * If we're on asym system ensure we consider the different capacities
+	 * of the CPUs when searching for the lowest_mask.
+	 */
+	ret = cpupri_find_fitness(&task_rq(p)->rd->cpupri, p,
+				lowest_mask, rt_task_fits_capacity);
 
 	/*
 	 * If cpu is non-preemptible, prefer remote cpu
@@ -1551,7 +1564,7 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int su
 	 * Otherwise: Don't bother moving it if the destination CPU is
 	 * not running a lower priority task.
 	 */
-	target = rt_energy_aware_wake_cpu(p);
+	target = rt_energy_aware_wake_cpu(p, ret);
 	if (target != -1 &&
 	    (may_not_preempt || p->prio < cpu_rq(target)->rt.highest_prio.curr))
 		goto out;
@@ -1598,7 +1611,6 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int su
 	 * requirement of the task - which is only important on heterogeneous
 	 * systems like big.LITTLE.
 	 */
-	may_not_preempt = task_may_not_preempt(curr, cpu);
 	test = (curr && (may_not_preempt ||
 			 (unlikely(rt_task(curr)) &&
 			  (curr->nr_cpus_allowed < 2 || curr->prio <= p->prio))));
@@ -1834,9 +1846,7 @@ struct task_struct *pick_highest_pushable_task(struct rq *rq, int cpu)
 	return NULL;
 }
 
-static DEFINE_PER_CPU(cpumask_var_t, local_cpu_mask);
-
-static int rt_energy_aware_wake_cpu(struct task_struct *task)
+static int rt_energy_aware_wake_cpu(struct task_struct *task, int ret)
 {
 	struct sched_domain *sd;
 	struct sched_group *sg;
@@ -1857,6 +1867,9 @@ static int rt_energy_aware_wake_cpu(struct task_struct *task)
 	bool boost_on_big = NULL;
 #endif
 	bool best_cpu_lt = true;
+
+	if (!ret)
+		return -1; /* No targets found */
 
 	rcu_read_lock();
 
@@ -1980,6 +1993,7 @@ static int find_lowest_rq(struct task_struct *task)
 #ifdef CONFIG_HW_RT_CAS
 	int cas_cpu;
 #endif
+	int ret;
 
 	/* Make sure the mask is initialized first */
 	if (unlikely(!lowest_mask))
@@ -1997,8 +2011,15 @@ static int find_lowest_rq(struct task_struct *task)
 		return cas_cpu;
 #endif
 
-	if (energy_aware())
-		cpu = rt_energy_aware_wake_cpu(task);
+	if (energy_aware()) {
+		/*
+	 	 * If we're on asym system ensure we consider the different capacities
+		 * of the CPUs when searching for the lowest_mask.
+		 */
+		ret = cpupri_find_fitness(&task_rq(task)->rd->cpupri, task,
+					lowest_mask, rt_task_fits_capacity);
+		cpu = rt_energy_aware_wake_cpu(task, ret);
+	}
 
 	if (cpu == -1)
 		cpu = task_cpu(task);
