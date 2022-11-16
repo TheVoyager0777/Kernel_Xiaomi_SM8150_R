@@ -745,8 +745,9 @@ static inline void count_memcg_events(struct mem_cgroup *memcg,
 static inline void count_memcg_page_event(struct page *page,
 					  enum vm_event_item idx)
 {
-	struct mem_cgroup *memcg;
 #ifdef CONFIG_HYPERHOLD
+	struct mem_cgroup *memcg;
+
 	if (!memcg)
 		return;
 #endif

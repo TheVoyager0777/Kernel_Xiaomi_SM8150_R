@@ -29,7 +29,8 @@ AS=llvm-as
 
 function overwrite_config() {
 	scripts/config --file ${OUT_DIR}/.config \
-		--set-str STATIC_USERMODEHELPER_PATH /system/bin/micd
+		--set-str STATIC_USERMODEHELPER_PATH /system/bin/micd \
+		-e	  SF_BINDER
 }
 
 # Use it to change the path or name of your extra script

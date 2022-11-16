@@ -862,7 +862,7 @@ config FORCE_ALLOC_FROM_DMA_ZONE
 
 config HYPERHOLD
         bool "Enable HyperHold"
-        default y
+        default n
         depends on MEMCG
         help
           HyperHold is a intelligent memory management solution.
