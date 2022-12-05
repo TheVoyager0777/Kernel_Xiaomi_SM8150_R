@@ -1438,7 +1438,7 @@ static void dequeue_rt_entity(struct sched_rt_entity *rt_se, unsigned int flags)
 	enqueue_top_rt_rq(&rq->rt);
 }
 
-#ifdef CONFIG_SMP
+#if defined CONFIG_SMP || defined CONFIG_RT_GROUP_SCHED
 static inline bool should_honor_rt_sync(struct rq *rq, struct task_struct *p,
 					bool sync)
 {
@@ -1466,6 +1466,7 @@ static void
 enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
+	bool sync = !!(flags & ENQUEUE_WAKEUP_SYNC);
 
 	schedtune_enqueue_task(p, cpu_of(rq));
 
@@ -1475,7 +1476,8 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 	enqueue_rt_entity(rt_se, flags);
 	walt_inc_cumulative_runnable_avg(rq, p);
 
-	if (!task_current(rq, p) && p->nr_cpus_allowed > 1)
+	if (!task_current(rq, p) && p->nr_cpus_allowed > 1 &&
+	    !should_honor_rt_sync(rq, p, sync))
 		enqueue_pushable_task(rq, p);
 }
 
@@ -1541,18 +1543,6 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int su
 	bool may_not_preempt;
 	bool sync = !!(flags & WF_SYNC);
 	int this_cpu;
-	int target = -1;
-
-	/*
-	 * If cpu is non-preemptible, prefer remote cpu
-	 * even if it's running a higher-prio task.
-	 * Otherwise: Don't bother moving it if the destination CPU is
-	 * not running a lower priority task.
-	 */
-	target = rt_energy_aware_wake_cpu(p);
-	if (target != -1 &&
-	    (may_not_preempt || p->prio < cpu_rq(target)->rt.highest_prio.curr))
-		goto out;
 
 	/* For anything but wake ups, just return the task_cpu */
 	if (sd_flag != SD_BALANCE_WAKE && sd_flag != SD_BALANCE_FORK)
@@ -1597,11 +1587,10 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int su
 	 * systems like big.LITTLE.
 	 */
 	may_not_preempt = task_may_not_preempt(curr, cpu);
-	test = (curr && (may_not_preempt ||
+        test = (curr && (may_not_preempt ||
 			 (unlikely(rt_task(curr)) &&
 			  (curr->nr_cpus_allowed < 2 || curr->prio <= p->prio))));
-
-	/*
+        /*
 	 * Respect the sync flag as long as the task can run on this CPU.
 	 */
 	if (should_honor_rt_sync(this_cpu_rq, p, sync) &&
@@ -1610,7 +1599,7 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int su
 		goto out_unlock;
 	}
 
-	if (test || !rt_task_fits_capacity(p, cpu)) {
+	if (energy_aware() || test || !rt_task_fits_capacity(p, cpu)) {
 		int target = find_lowest_rq(p);
 
 		/*
@@ -1634,7 +1623,6 @@ select_task_rq_rt(struct task_struct *p, int cpu, int sd_flag, int flags, int su
 
 out_unlock:
 	rcu_read_unlock();
-
 out:
 	return cpu;
 }
