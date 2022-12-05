@@ -8424,6 +8424,10 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 			util = cpu_util_next(cpu, p, cpu);
 			cpu_cap = capacity_of(cpu);
 
+                        /* Skip CPUs which do not fit task requirements */
+			if (cpu_cap < uclamp_task_util(p))
+				continue;
+
 			/*
 			 * Skip CPUs that cannot satisfy the capacity request.
 			 * IOW, placing the task there would make the CPU

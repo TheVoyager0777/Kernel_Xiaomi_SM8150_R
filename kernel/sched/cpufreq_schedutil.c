@@ -367,6 +367,7 @@ static void sugov_iowait_boost(struct sugov_cpu *sg_cpu, unsigned long *util,
 	boost_util = sg_cpu->iowait_boost;
 	boost_max = sg_cpu->iowait_boost_max;
 
+	boost_max = uclamp_rq_util_with(cpu_rq(sg_cpu->cpu), boost_max, NULL);
 	if (*util * boost_max < *max * boost_util) {
 		*util = boost_util;
 		*max = boost_max;
