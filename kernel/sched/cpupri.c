@@ -74,8 +74,7 @@ drop_nopreempt_cpus(struct cpumask *lowest_mask)
 }
 
 static inline int __cpupri_find(struct cpupri *cp, struct task_struct *p,
-				struct cpumask *lowest_mask, int idx,
-				bool drop_nopreempts)
+				struct cpumask *lowest_mask, int idx)
 {
 	struct cpupri_vec *vec  = &cp->pri_to_cpu[idx];
 	int skip = 0;
@@ -111,10 +110,6 @@ static inline int __cpupri_find(struct cpupri *cp, struct task_struct *p,
 
 	if (lowest_mask) {
 		cpumask_and(lowest_mask, &p->cpus_allowed, vec->mask);
-		cpumask_and(lowest_mask, lowest_mask, cpu_active_mask);
-
-		if (drop_nopreempts)
-			drop_nopreempt_cpus(lowest_mask);
 
 		/*
 		 * We have to ensure that we have at least one bit
@@ -159,7 +154,8 @@ int cpupri_find_fitness(struct cpupri *cp, struct task_struct *p,
 		bool (*fitness_fn)(struct task_struct *p, int cpu))
 {
 	int task_pri = convert_prio(p->prio);
-	int idx, cpu;
+	int best_unfit_idx = -1;
+	int idx = 0, cpu;
 	bool drop_nopreempts = task_pri <= MAX_RT_PRIO;
 
 	BUG_ON(task_pri >= CPUPRI_NR_PRIORITIES);
@@ -167,7 +163,7 @@ int cpupri_find_fitness(struct cpupri *cp, struct task_struct *p,
 retry:
 	for (idx = 0; idx < task_pri; idx++) {
 
-		if (!__cpupri_find(cp, p, lowest_mask, idx, drop_nopreempts))
+		if (!__cpupri_find(cp, p, lowest_mask, idx))
 			continue;
 
 		if (!lowest_mask || !fitness_fn)
@@ -183,8 +179,22 @@ retry:
 		 * If no CPU at the current priority can fit the task
 		 * continue looking
 		 */
-		if (cpumask_empty(lowest_mask))
+
+		smp_rmb();
+
+		if (cpumask_empty(lowest_mask)) {
+			if (drop_nopreempts)
+				drop_nopreempt_cpus(lowest_mask);
+
+			/*
+			 * Store our fallback priority in case we
+			 * didn't find a fitting CPU
+			 */
+			if (best_unfit_idx == -1)
+				best_unfit_idx = idx;
+
 			continue;
+		}
 
 		return 1;
 	}
@@ -199,8 +209,16 @@ retry:
 	}
 
 	/*
-	 * If we failed to find a fitting lowest_mask, kick off a new search
-	 * but without taking into account any fitness criteria this time.
+	 * If we failed to find a fitting lowest_mask, make sure we fall back
+	 * to the last known unfitting lowest_mask.
+	 *
+	 * Note that the map of the recorded idx might have changed since then,
+	 * so we must ensure to do the full dance to make sure that level still
+	 * holds a valid lowest_mask.
+	 *
+	 * As per above, the map could have been concurrently emptied while we
+	 * were busy searching for a fitting lowest_mask at the other priority
+	 * levels.
 	 *
 	 * This rule favours honouring priority over fitting the task in the
 	 * correct CPU (Capacity Awareness being the only user now).
@@ -215,12 +233,11 @@ retry:
 	 * must do proper RT planning to avoid overloading the system if they
 	 * really care.
 	 */
-	if (fitness_fn)
-		return cpupri_find(cp, p, lowest_mask);
+	if (best_unfit_idx != -1)
+		return __cpupri_find(cp, p, lowest_mask, best_unfit_idx);
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(cpupri_find_fitness);
 
 /**
  * cpupri_set - update the cpu priority setting
