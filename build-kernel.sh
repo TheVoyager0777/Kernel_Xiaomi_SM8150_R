@@ -1,20 +1,15 @@
 #!/bin/bash
 
-yellow='\033[0;33m'
-white='\033[0m'
-red='\033[0;31m'
-gre='\e[0;32m'
-
 #
 # Enviromental Variables
 #
 
-# Set host name
-export KBUILD_BUILD_HOST="Voayger-sever"
-export KBUILD_BUILD_USER="TheVoyager"
+export SOURCE_ROOT=$(readlink -f $PWD)
+export BUILD_CONFIG=${BUILD_CONFIG:-build.config}
 
-# Set the current branch name
-BRANCH=$(git rev-parse --symbolic-full-name --abbrev-ref HEAD)
+# Set host name
+export KBUILD_BUILD_HOST="Voayger-server"
+export KBUILD_BUILD_USER="TheVoyager"
 
 # Set the last commit sha
 COMMIT=$(git rev-parse --short HEAD)
@@ -24,21 +19,24 @@ DATE=$(date +"%d.%m.%y")
 
 # Set our directory
 OUT_DIR=out/
+PRODUCT_DIR=${SOURCE_ROOT}/anykernel
+
+# Set defconfig folder (Root is arch/arm64/configs)
+DEFCONFIG_DIR=arch/arm64/configs/
 
 # Set script config dir
-CONFIG=build_config
+ARGS_DIR=build_config
+
+MULTI_BUILD=0
+
+STAT_FILE="${OUT_DIR}/Version"
 
 #Set csum
-CSUM=$(cksum <<<${COMMIT} | cut -f 1 -d ' ')
+CSUM=$(cksum <<<"${COMMIT}" | cut -f 1 -d ' ')
 
-if [ ! -f "${OUT_DIR}Version" ] || [ ! -d "${OUT_DIR}" ]; then
-	echo "init Version"
-	mkdir -p $OUT_DIR
-	echo 1 >${OUT_DIR}Version
-fi
-
-#Set build count
-BUILD=$(cat out/Version)
+# shellcheck source=/dev/null
+source ${ARGS_DIR}/build_definitions.global
+export FILES
 
 # How much kebabs we need? Kanged from @raphielscape :)
 if [[ -z "${KEBABS}" ]]; then
@@ -46,56 +44,49 @@ if [[ -z "${KEBABS}" ]]; then
 	export KEBABS="$((COUNT * 2))"
 fi
 
-function enable_flto() {
-	scripts/config --file ${OUT_DIR}/.config \
-		-e	LTO				\
-		-e	LTO_CLANG		\
-		-d	THIN_LTO
-
-    	# Make olddefconfig
-	cd ${OUT_DIR} || exit
-	make -j${KEBABS} ${ARGS} olddefconfig
-	cd ../ || exit
-}
-
-function enable_tlto() {
-	scripts/config --file ${OUT_DIR}/.config \
-		-e	LTO				\
-		-e	LTO_CLANG		\
-		-e	THIN_LTO
-
-    	# Make olddefconfig
-	cd ${OUT_DIR} || exit
-	make -j${KEBABS} ${ARGS} olddefconfig
-	cd ../ || exit
-}
-
-function disable_lto() {
-	scripts/config --file ${OUT_DIR}/.config \
-	-d LTO_CLANG
-}
+PREBUILTS_PATHS=(
+LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN
+LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN
+LINUX_GCC_CROSS_COMPILE_COMPAT_PREBUILTS_BIN
+CLANG_PREBUILT_BIN
+)
 
 function checkbuild() {
-	if [[ ! -f ${OUT_DIR}/arch/arm64/boot/Image-dtb ]] && [[ ! -f ${OUT_DIR}/arch/arm64/boot/Image.gz-dtb ]]; then
-		echo "Error in ${os} build!!"
+	if [[ ! -f ${OUT_DIR}/arch/arm64/boot/Image ]] && [[ ! -f ${OUT_DIR}/arch/arm64/boot/Image.gz ]]; then
+		echo "Error in ${OS} build!!"
         	git checkout arch/arm64/boot/dts/vendor &>/dev/null
 		exit 1
 	fi
 }
 
 function out_product() {
+	PRODUCT_OUT=${PRODUCT_DIR}/kernels/"$OS"
+	dts_source=arch/arm64/boot/dts
+
 	find ${OUT_DIR}/$dts_source -name '*.dtb' -exec cat {} + >${OUT_DIR}/arch/arm64/boot/dtb
 
-	mkdir -p anykernel/kernels/$OS
-	# Import Anykernel3 folder
-	if [[ -f ${OUT_DIR}/arch/arm64/boot/Image.gz-dtb ]]; then
-		cp ${OUT_DIR}/arch/arm64/boot/Image.gz-dtb anykernel/kernels/$OS
-	else
-		if [[ -f ${OUT_DIR}/arch/arm64/boot/Image-dtb ]]; then
-			cp ${OUT_DIR}/arch/arm64/boot/Image-dtb anykernel/kernels/$OS
-		fi
+	if [ ! -d "anykernel" ]; then
+		git clone https://github.com/TheVoyager0777/AnyKernel3.git -b kona --depth=1 anykernel
 	fi
-	cp ${OUT_DIR}/arch/arm64/boot/dtbo.img anykernel/kernels/$OS
+
+	mkdir -p anykernel/kernels/"$OS"
+	cat /dev/null > "${PRODUCT_DIR}"/files
+
+	for FILE in ${FILES}; do
+		if [ -f ${OUT_DIR}/"$FILE" ]; then
+			filename=$(echo "$FILE" | awk -F "/" '{print $NF}')
+			# Copy to target folder
+			echo "  $FILE ${PRODUCT_OUT}"
+			echo "${PREBUILT_OUT}/$FILE"
+			echo "$filename" >> "${PRODUCT_DIR}"/files
+			cp -p ${OUT_DIR}/"$FILE" "${PRODUCT_OUT}"/
+			echo "$FILE copied to ${PRODUCT_OUT}"
+	  	else
+			echo "$FILE does not exist, skipping"
+		fi
+	done
+
+	rm -r ${OUT_DIR}/arch/arm64/boot/
 
 	# If we use a patch script..
 	if [[ $PATCH_OUT_PRODUCT_HOOK == 1 ]]; then
@@ -107,88 +98,147 @@ function clean_up_outfolder() {
 	echo "------------ Clean up dts folder ------------"
 	git checkout arch/arm64/boot/dts/vendor &>/dev/null
 	echo "----------- Cleanup up old output -----------"
-	if [[ -f ${OUT_DIR}/arch/arm64/boot/Image ]] && [[ -f ${OUT_DIR}/arch/arm64/boot/Image.gz ]]; then
+	if [[ -d ${OUT_DIR}/arch/arm64/boot/ ]]; then
 		rm -r ${OUT_DIR}/arch/arm64/boot/
 	fi
 	echo "------- Cleanup up previous kernelzip -------"
-	if [[ -d anykernel/out/ ]]; then
+	if [[ ! MULTI_BUILD -eq 1 ]]; then
+		if [[ -d anykernel/out/ ]]; then
 			rm -r anykernel/out/
 			mkdir anykernel/out
+		fi
 	fi
+
+	# Cleanup temp
+	if [[ -d anykernel/kernels/"${OS}" ]]; then
+		rm -r anykernel/kernels/"${OS}"
+	fi
+
 	echo "-------------------- Done! ------------------"
 }
 
 function ak3_compress()
 {
-	cd anykernel || exit
+		if [[ ! -d anykernel/out ]]; then
+			mkdir anykernel/out
+		fi
+		cd anykernel || exit
+		zip -r9 "${ZIPNAME}" ./* -x .git .gitignore out/ ./*.zip
+		mv ./*.zip out/
+		cd ../
+}
 
-	if [[ ! -d anykernel/out/ ]]; then
-			mkdir out
+function check_stat_file() {
+	#Set build count
+	if [ ! -f "${STAT_FILE}" ] || [ ! -d "${OUT_DIR}" ]; then
+		echo "init Version"
+		mkdir -p $OUT_DIR
+		BUILD=1
+		echo "BUILD_COUNT=${BUILD}" > ${STAT_FILE}
 	fi
+}
 
-	zip -r9 "${ZIPNAME}" ./* -x .git .gitignore out/ ./*.zip
-	if [[ ! MULTI_BUILD ]]; then
-		mkdir out
-	fi
-	mv *.zip out/
-	cd ../
+function stat_print() {
+	cat /dev/null > ${STAT_FILE}    #clean all info
+	{								#Always Print them
+		echo "BUILD_COUNT=${BUILD}"
+		echo "IS_MULTI_BUILD=${MULTI_BUILD}"
+		echo "DEVICE=${DEVICE}"
+		echo "TARGET_OS=${OS}"
+		echo "$ZIPNAME" 
+
+		if [[ MULTI_BUILD -eq 1 ]]; then
+			echo "LIST_DIR=${device_list}"
+		fi
+	} >> "${STAT_FILE}" || export ZIPNAME
+
+	#Only when multi compile
+
+}
+
+function pre_compile() {
+	GET_BUILD_COUNT=$(awk -F "=" '/BUILD_COUNT/ {print $2}' "${STAT_FILE}")
+
+	BUILD=$GET_BUILD_COUNT
+
+	echo "Current version is $GET_BUILD_COUNT"
+	ZIPNAME="Voyager-${DEVICE^^}-build${BUILD}-${OS}-${CSUM}-${DATE}.zip"
+	stat_print
+}
+
+function post_compile() {
+		NEW_COUNT=$((BUILD + 1))
+		echo "Next version is $NEW_COUNT"
+		cat /dev/null > ${STAT_FILE}
+		echo "BUILD_COUNT=${NEW_COUNT}" > ${STAT_FILE}
+}
+
+function header_install() {
+	echo "======================"
+	echo "Installing kernel headers"
+	set -x
+	(cd ${OUT_DIR} && \
+	make HOSTCFLAGS="${TARGET_INCLUDES}" HOSTLDFLAGS="${TARGET_LINCLUDES}" "${ARGS[@]}" headers_install)
+	set +x
+}
+
+function generate_defconfig() {
+
+	ARCH=arm64 \
+	CROSS_COMPILE=aarch64-linux-gnu- \
+	CC=clang \
+	CLANG_TRIPLE=aarch64-linux-gnu- \
+	LD=ld.lld \
+	scripts/gki/generate_defconfig.sh vendor/star-qgki_defconfig
 }
 
 function start_build() {
-	if [[ ! MULTI_BUILD -eq 1 ]]; then
-		clean_up_outfolder
+	trap "echo aborting.." 2 || exit 1;
+
+	pre_compile
+
+	if [[ MULTI_BUILD -eq 1 ]] && [[ -d ${OUT_DIR}/arch/arm64/boot/ ]]; then
+		rm -r ${OUT_DIR}/arch/arm64/boot/
 	fi
 
 	# Start Build
-	echo "------ Starting ${OS} Build, Device ${DEVICE} ------"
+	echo "------ Starting ${OS^} Build, Device ${DEVICE^^} ------"
 
-	#
-	# Set some variables for further use
-	#
-	# Let ak3 compress sequence know which system type we use
+	# shellcheck source=/dev/null
+	source build_config/"${PACTH_NAME}"
 
-	if [[ ${OS} == miui ]]; then
-		source ./build_config/build.args.MIUI
-	elif [[ ${OS} == aosp ]]; then
-		source build_config/build.args.AOSP
-	elif [[ ${OS} == aospa ]]; then
-		source build_config/build.args.AOSPA
-	elif [[ ${OS} == custom ]]; then
-		source build_config/build.args.CUSTOM
-	fi
+	cat "${ARGS_DIR}/build.args.${OS^^}"
 
-	source build_config/${PACTH_NAME}
+	# shellcheck source=/dev/null
+	. "${ARGS_DIR}/build.args.${OS^^}"
 
-	# Set compiler path
-	PATH=${CLANG_PATH}/bin:$PATH
-	export LD_LIBRARY_PATH=/usr/lib64:$LD_LIBRARY_PATH
+	for PREBUILT_BIN in "${PREBUILTS_PATHS[@]}"; do
+	    PREBUILT_BIN=\${${PREBUILT_BIN}}
+	    eval PREBUILT_BIN="${PREBUILT_BIN}"
+	    if [ -n "${PREBUILT_BIN}" ]; then
+	        # Mitigate dup paths
+	        PATH=${PATH//"${SOURCE_ROOT}\/${PREBUILT_BIN}:"}
+	        PATH=${SOURCE_ROOT}/${ARGS_DIR}/${PREBUILT_BIN}/bin:${PATH}
+	    fi
+	done
+	export PATH
+
+	echo "PATH=${PATH}"
+
+	export CLANG_TRIPLE CROSS_COMPILE CROSS_COMPILE_COMPAT CROSS_COMPILE_ARM32 ${ARGS[1]}
 
 	# Make defconfig
-	make -j${KEBABS} ${ARGS} "${DEVICE}"_defconfig
+	DEFCONFIG=$(echo ${DEFCONFIG_DIR} | awk -F "arch/arm64/configs/" '{print $2}')
+	make -j"${KEBABS}" "${ARGS[@]}" "${DEFCONFIG}"/"${DEVICE}"_defconfig
 
 	overwrite_config
 
 	# Make olddefconfig
 	cd ${OUT_DIR} || exit
-	make -j${KEBABS} ${ARGS} CC="ccache clang" HOSTCC="ccache gcc" HOSTCXX="ccache g++" olddefconfig
+	make -j"${KEBABS}" "${ARGS[@]}" CC="ccache clang" HOSTCC="ccache gcc" HOSTCXX="ccache g++" olddefconfig
 	cd ../ || exit
 
-	if [[ "$@" =~ "flto"* ]]; then
-		# Enable LTO
-		enable_flto
-		make -j${KEBABS} ${ARGS} CC="ccache clang" HOSTCC="ccache gcc" HOSTCXX="ccache g++" 2>&1 | tee build.log
-	fi
-
-	if [[ "$@" =~ "tlto"* ]]; then
-		# Enable LTO
-		enable_tlto
-		make -j${KEBABS} ${ARGS} CC="ccache clang" HOSTCC="ccache gcc" HOSTCXX="ccache g++" 2>&1 | tee build.log
-	else
-		make -j${KEBABS} ${ARGS} CC="ccache clang" HOSTCC="ccache gcc" HOSTCXX="ccache g++" 2>&1 | tee build.log
-	fi
-
-	ZIPNAME="MiuiCX-${DEVICE^^}-build${BUILD}-${OS}-${CSUM}-${DATE}.zip"
-	export ZIPNAME	
+	make -j"${KEBABS}" "${ARGS[@]}" CC="ccache clang" HOSTCC="ccache gcc" HOSTCXX="ccache g++" 2>&1 | tee build.log
 
 	echo "------ Filename: ${ZIPNAME} ------"
 
@@ -198,96 +248,91 @@ function start_build() {
 
 	ak3_compress
 
-	echo "------ Finishing ${OS} Build, Device ${DEVICE} ------"
+	echo "------ Finishing ${OS^} Build, Device ${DEVICE^^} ------"
 }
 
 # Complie with a list of specialized devices
-function build_by_list() {
+function new_build_by_list() {
 	clean_up_outfolder
-	while read rows
-	do 
-   		 DEVICE=$(echo $rows | awk '{print $1}')
-   		 OS=$(echo $rows | awk '{print $2}')
-   		 start_build
-	done < ${LIST}
+	export MULTI_BUILD=1
+	check_stat_file
+	export LIST=$device_list
+	j=$(wc -l "${LIST}" | awk -F " " '{print $1}')
 
-	git checkout arch/arm64/boot/dts/vendor &>/dev/null
+	for ((i=1; i<=j; i++))
+	do
+		DEVICE=$(awk 'NR=='$i' {print $1}'  "$LIST")
+		OS=$(awk 'NR=='$i' {print $2}'  "$LIST")
+
+		git checkout arch/arm64/boot/dts/vendor &>/dev/null
+		trap "echo aborting.." 2 || exit 1;
+		start_build
+	done
+	post_compile
 }
 
 #
 # Do complie 
 #
-if [ ! -d "anykernel" ]; then
-	git clone https://github.com/TheVoyager0777/AnyKernel3 -b msmnile --depth=1 anykernel
-fi
 
-START=$(date +"%s")
+if [[ "$1" ]]; then
+	device_list=$(find ${ARGS_DIR} -name "$1")
+	supported_device=$(find ${DEFCONFIG_DIR} -name "$1"_defconfig | awk -F "/" '{print $NF}')
 
-if [[ ! "$2" =~ ""* ]] && [[ ! "$1" =~ "list"* ]] && [[ ! "$1" =~ "clean" ]] && [[ ! "$1" =~ "-h" ]]; then
-	DEVICE=$1
-	OS=$2
-	export MULTI_BUILD=0
-	start_build
-fi
+	if [[ $device_list ]]; then
+		list_name=$(echo "$device_list" | awk -F "/" '{print $2}')
+	elif [[ $supported_device ]]; then
+		device_name=$(echo "$supported_device" | awk -F "_" '{print $1}')
+	fi
 
-if [[ -a "$1" ]]; then
-	export LIST=$1
-	echo "---- Detect build list for bulk complie! ----"
-	export MULTI_BUILD=1
-	build_by_list
-fi
+	case $1 in
+		"$list_name")
+			echo "---- Detect build list for bulk complie! ----"
+			new_build_by_list
+		;;
 
-END=$(date +"%s")
-DIFF=$((END - START))
+		"help")
+			printf "Usage: 			bash build-kernel.sh [device_code] [system_type] \n
+		        bash build-kernel.sh [listfile] \n
+		        bash build-kernel.sh clean clean up work folders include dts, complie output and kernelzip"
+		;;
 
-echo $(($BUILD + 1)) >${OUT_DIR}Version
-#
-# Finish complie 
-#
+		"clean")
+			case $2 in
+				"outdir")
+					if [[ -d ${OUT_DIR} ]]; then
+						rm -r ${OUT_DIR}
+					fi
+				;;
 
+				"kzip")
+					clean_up_outfolder
+				;;
+			esac	
+		;;
 
-#
-# Functions for help
-#
+		"$device_name")
+			OS=$2
+			TARGET_SYS=$(find ${ARGS_DIR} -name build.args."${OS^^}" | awk -F "/" '{print $2}' | awk -F "." '{print $3}')
+			if [[ ! ${TARGET_SYS,,} ]]; then
+				echo "There is no args configuration for this system"
+			else
+				echo "Found args configuration for selected system"
+			fi
 
-# If you need clean up when complication is manually terminated..
-if [[ "$1" =~ "clean" ]]; then
-	clean_up_outfolder
-fi
-
-#
-# Functions for help
-#
-
-# Self-introduction function
-SELF_INTRO1="   This is a commonized script for kernel building. \
-		You can use it to complie single target device \
-		or complie multi targets in one command. \
-		With this script, you can choose the complie type \
-		that your system compatible with to enable \
-		some specific configs or flags. \
-		It also can automically pack the kernel image \
-		and dtb, dtbo with Anykernel to a flashable zip \
-		after complie sequence finish. You can also \
-		invoke a extra script (To see more information, \
-		please see build_config/build.args) \
-		after making old defconfig to do some special changes. \
-		For more information, see the script usage."
-
-SELF_INTRO2=$(echo "Usage1: bash build-kernel.sh [device_code] [system_type]")
-SELF_INTRO3=$(echo "Usage2: bash build-kernel.sh list")
-SELF_INTRO4=$(echo "Usage3: bash build-kernel.sh -g [device_codes (separated with space)]")
-SELF_INTRO5=$(echo "Usage4: bash build-kernel.sh clean")
-SELF_INTRO7=$(echo "-g [device_codes]:           generate a list of device_code for continuous complie")
-SELF_INTRO7=$(echo "-clean:                      clean up work folders include dts, complie output and kernelzip")
-
-if [[ "$1" =~ "-h" ]]; then
-		echo $SELF_INTRO1;
-		echo "          ";
-		echo $SELF_INTRO2;
-		echo $SELF_INTRO3;
-		echo $SELF_INTRO4;
-		echo "          ";
-		echo $SELF_INTRO5;
-		echo $SELF_INTRO7;
+			case $2 in 
+				"${TARGET_SYS,,}")
+					trap "echo Abort.." 2
+					DEVICE=$1
+					clean_up_outfolder
+					export MULTI_BUILD=0
+					check_stat_file
+					start_build
+					post_compile
+				;;
+			esac
+		;;
+	esac
+else
+	echo "Argument is needed"
 fi
