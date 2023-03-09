@@ -1,0 +1,11 @@
+TARGET_INCLUDES="-I${SOURCE_ROOT}/include/uapi -I/usr/include -I/usr/include/x86_64-linux-gnu -I${SOURCE_ROOT}/include -L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld"
+TARGET_LINCLUDES="-L/usr/lib -L/usr/lib/x86_64-linux-gnu -fuse-ld=lld"
+
+# Set compiler path
+PATH=${CLANG_PATH}/bin:$PATH
+export LD_LIBRARY_PATH=/usr/lib64:$LD_LIBRARY_PATH
+
+FILES="
+arch/arm64/boot/Image-dtb
+arch/arm64/boot/dtbo.img
+"

@@ -2,21 +2,30 @@
 # This is the cross complie invocation, these variables will be export in build-kernel.sh
 #
 
-# Set clang path
-CLANG_PATH=/home/voyager/gclang/clang-r458507
+CLANG_PREBUILT_BIN=toolchains/proton-clang/bin
+LINUX_GCC_CROSS_COMPILE_PREBUILTS_BIN=toolchains/gcc-android12L-release/aarch64-linux-android-4.9/
+LINUX_GCC_CROSS_COMPILE_ARM32_PREBUILTS_BIN=toolchains/gcc-android12L-release/arm-linux-androideabi-4.9/
 
-ARGS="ARCH=arm64 \
+CLANG_TRIPLE=aarch64-linux--
+CROSS_COMPILE=aarch64-linux-gnu-
+CROSS_COMPILE_ARM32=tarm-linux-gnueabi-
+
+ARGS=(
+ARCH=arm64 \
 O=${OUT_DIR} \
 LLVM=1 \
-CLANG_TRIPLE=aarch64-linux-gnu- \
-CROSS_COMPILE=aarch64-linux-gnu- \
-CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-LD=ld.lld \
+LD=ld.lld
 OBJDUMP=llvm-objdump \
+OBJCOPY=llvm-objcopy \
 NM=llvm-nm \
 AR=llvm-ar \
 AS=llvm-as
--j${KEBABS}"
+-j${KEBABS}
+)
+
+FILES="
+arch/arm64/boot/Image-dtb
+"
 
 #
 # If you need overwrite some config but don't want to change defconfig, then use the function below to 
